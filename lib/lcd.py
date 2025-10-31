@@ -1,21 +1,24 @@
 import time
 import asyncio
 from machine import Pin
-
 # import gc
 import struct
-
 from lib import udp
 
-
+    
 class LCD:
-    def __init__(self, spi, cs, dc, rst, bl, w, h, 旋转=0, color_bit=16):
+    def __init__(self, spi, cs, dc, rst, bl,  旋转, 
+                 color_bit,w, h,逆CS):
         self._spi = spi
         self._cs = Pin(cs, Pin.OUT)
+        self._cs_en = 1
+        self._cs_dis = 0
         self._dc = Pin(dc, Pin.OUT)
         self._rst = Pin(rst, Pin.OUT)
         self._bl = Pin(bl, Pin.OUT, value=1)
         self.__color_bit = color_bit
+        
+        # 通过选择角度设置w和h
         self._旋转 = 旋转
         if 旋转 == 1 or 旋转 == 3:
             self._width = w
@@ -24,6 +27,7 @@ class LCD:
             self._width = h
             self._height = w
 
+        # 不同色彩需要数据不同
         if self.__color_bit == 16:
             self.color_fn = self._color565
         elif self.__color_bit == 18:
@@ -33,6 +37,13 @@ class LCD:
         else:
             raise ValueError("色彩位数有误")
         self._init_color()
+        
+        # 如果SPI只驱动了两个设备，可以省略CS
+        self.cs_on = 0
+        self.cs_off = 1
+        if 逆CS:
+            self.cs_on = 1
+            self.cs_off = 0
 
         # 字库：char[size][字] = 点位图
         self._char = {}
@@ -107,19 +118,21 @@ class LCD:
     def _write_cmd(self, cmd):
         self._dc.value(0)
         self._cs.value(0)
+        # time.sleep(0.03 )
         self._spi.write(bytearray([cmd]))
         self._cs.value(1)
 
     def _write_data(self, data):
         self._dc.value(1)
         self._cs.value(0)
+        # time.sleep(0.03 )
         self._spi.write(bytearray([data]))
         self._cs.value(1)
 
     def _write_data_bytes(self, buf):
         self._dc.value(1)
         self._cs.value(0)
-
+        # time.sleep(0.03 )
         self._spi.write(buf)
         self._cs.value(1)
 
@@ -138,6 +151,7 @@ class LCD:
 
         # CASET (0x2A)
         self._dc.value(0)
+        # time.sleep(0.03 )
         self._spi.write(b"\x2a")
         self._dc.value(1)
 
@@ -146,20 +160,24 @@ class LCD:
         buf[1] = y0 & 0xFF
         buf[2] = (y1 >> 8) & 0xFF
         buf[3] = y1 & 0xFF
+        # time.sleep(0.03 )
         self._spi.write(buf)
 
         # RASET (0x2B)
         self._dc.value(0)
+        # time.sleep(0.03 )
         self._spi.write(b"\x2b")
         self._dc.value(1)
         buf[0] = (x0 >> 8) & 0xFF
         buf[1] = x0 & 0xFF
         buf[2] = (x1 >> 8) & 0xFF
         buf[3] = x1 & 0xFF
+        # time.sleep(0.03 ) 
         self._spi.write(buf)
 
         # RAMWR (0x2C)
         self._dc.value(0)
+        # time.sleep(0.03 )
         self._spi.write(b"\x2c")
         self._cs.value(1)
 

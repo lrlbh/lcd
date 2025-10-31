@@ -17,8 +17,10 @@ import lcd
 
 
 class ST7796(lcd.LCD):
-    def __init__(self, spi, cs, dc, rst, bl, 旋转=0, color_bit=16):
-        super().__init__(spi,cs,dc,rst,bl,320,480,旋转,color_bit)
+    def __init__(self, spi, cs, dc, rst, bl,  旋转=3, 
+                 color_bit=24,w=320, h=480,逆CS=False):
+        super().__init__(spi, cs, dc, rst, bl,  旋转,
+                         color_bit,w, h,逆CS)
 
     def _init(self):
         # 复位
