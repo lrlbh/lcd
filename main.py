@@ -1,78 +1,92 @@
 from lib import st7796,st7789
 from lib import udp
 import time
-from machine import SPI
+from machine import SPI,Pin
+
+# t = Pin(48,Pin.OUT)
+# t.value(1)
+
+# time.sleep(1000)
 
 # 热压机V6,初始化
+# spi = SPI(
+#     1,
+#     baudrate=100_000_000,
+#     polarity=0,
+#     phase=0,
+#     sck=38,
+#     mosi=17,
+#     miso=None,
+# )   
+# udp.send(spi)                                                 
+# st = st7796.ST7796(
+#     spi,
+#     cs=16,
+#     dc=48,
+#     rst=18,
+#     bl=11,
+#     旋转=3,
+#     color_bit=24,
+# )
+
+
+# 双7789初始化
 spi = SPI(
     1,
     baudrate=100_000_000,
     polarity=0,
     phase=0,
     sck=38,
-    mosi=17,
+    mosi=39,
     miso=None,
 )   
-udp.send(spi)     
-# time.sleep(100)                                               
-st = st7796.ST7796(
+# udp.send(spi)                                                 
+st = st7789.ST7789(
     spi,
-    cs=16,
-    dc=48,
-    rst=18,
-    bl=11,
+    cs=48,
+    dc=47,
+    rst=40,
+    bl=9,
+    旋转=3,
+    color_bit=16,
+)
+st.def_字符.all += "123sdf电压:-：Ds"
+st._init()#.load_bmf("/no_delete/270度左旋转几个字符.bmf")
+
+tm = st.test_spi()
+udp.send(tm) 
+st.test()
+st1 = st7789.ST7789(
+    spi,
+    cs=48,
+    dc=47,
+    rst=40,
+    bl=9,
     旋转=3,
     color_bit=24,
+    逆CS= True
 )
+TE = 21
+st1.def_字符.all += "123sdf电压:-：Ds"
+st1._init()#.load_bmf("/no_delete/270度左旋转几个字符.bmf")
 
-# spi = SPI(
-#     1,
-#     baudrate=60_000_000,
-#     polarity=0,
-#     phase=0,  
-#     sck=1,  
-#     mosi=3,
-#     miso=None,
-# )                                                       
-# st = st7789.ST7789(
-#     spi,
-#     cs=7,
-#     dc=6,
-#     rst=5,
-#     bl=8,
-#     旋转=1,       
-#     color_bit=16,
-# )    
-
-st.def_字符.all += "123sdf电压:-：Ds"
-st._init().load_bmf("/no_delete/270度左旋转几个字符.bmf")
+# while True:
+#     st._write_cmd(0x01)
+#     time.s
 
 
-# 测试SPI速率
-t1 = st.color.亮彩.天蓝 * 320 * 480
-t2 = st.color.亮彩.柠黄 * 320 * 480
-t3 = memoryview(t1)
-t4 = memoryview(t2)
+tm = st1.test_spi() 
+udp.send(tm) 
 
-se = 0
-st._dc.value(1)
-st._cs.value(0)
-for i in range(100):  
-    s = time.ticks_ms()  
-    # st._set_window(0, 0, st._width - 1, st._height - 1)
-    st._write_data_bytes(t3)
-    tt = time.ticks_ms() - s
-    se += tt 
-    udp.send(tt)
-    # st._set_window(0, 0, st._width - 1, st._height - 1)
-    s = time.ticks_ms()  
-    st._write_data_bytes(t4)
-    tt = time.ticks_ms() - s
-    udp.send(tt)
 
-    se += tt 
-st._cs.value(1)
-udp.send(se / 200)                                 
+
+
+st1.test()
+#time.sleep(10000) 
+# while True:
+#     udp.send(1)
+#     time.sleep(1) 
+                          
 
 t = 16
 tt = 0
