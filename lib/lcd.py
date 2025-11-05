@@ -1,21 +1,32 @@
 import time
 import asyncio
 from machine import Pin
+
 # import gc
 import struct
 from lib import udp
 
-    
+
 class LCD:
-    def __init__(self, spi, cs, dc, rst, bl,  旋转, 
-                 color_bit,w, h,逆CS):
+    def __init__(self, spi, cs, dc, rst, bl,
+                 旋转, color_bit, w, h, 逆CS):
         self._spi = spi
         self._cs = Pin(cs, Pin.OUT)
-        self._cs_en = 1
-        self._cs_dis = 0
         self._dc = Pin(dc, Pin.OUT)
-        self._rst = Pin(rst, Pin.OUT)
-        self._bl = Pin(bl, Pin.OUT, value=1)
+        
+        # 复位
+        if rst is not None:
+            self._rst = Pin(rst, Pin.OUT)
+        else:
+            self._rst = None
+            
+        # 背光
+        if bl is not None:
+            self._bl = Pin(bl, Pin.OUT, value=1)
+        else:
+            self._bl = None
+            
+        # 像素bit
         self.__color_bit = color_bit
         
         # 通过选择角度设置w和h
@@ -25,7 +36,7 @@ class LCD:
             self._height = h
         else:
             self._width = h
-            self._height = w
+            self._height = w 
 
         # 不同色彩需要数据不同
         if self.__color_bit == 16:
@@ -37,13 +48,13 @@ class LCD:
         else:
             raise ValueError("色彩位数有误")
         self._init_color()
-        
+
         # 如果SPI只驱动了两个设备，可以省略CS
-        self.cs_on = 0
-        self.cs_off = 1
+        self._cs_on = 0
+        self._cs_off = 1 
         if 逆CS:
-            self.cs_on = 1
-            self.cs_off = 0
+            self._cs_on = 1
+            self._cs_off = 0
 
         # 字库：char[size][字] = 点位图
         self._char = {}
@@ -94,7 +105,7 @@ class LCD:
             # BMP 按行从下到上，需要翻转
             self._set_window(x, y, x + width - 1, y + height - 1)
             self._dc.value(1)
-            self._cs.value(0)
+            self._cs.value(self._cs_on)
 
             line_bytes = ((width * 3 + 3) // 4) * 4  # 每行 4 字节对齐
             buf = bytearray(width * 3)
@@ -112,29 +123,26 @@ class LCD:
                         color = self._color888(r, g, b)
                     self._spi.write(color)
 
-            self._cs.value(1)
+            self._cs.value(self._cs_off)
 
     # ------- 基本IO -------
     def _write_cmd(self, cmd):
         self._dc.value(0)
-        self._cs.value(0)
-        # time.sleep(0.03 )
+        self._cs.value(self._cs_on)
         self._spi.write(bytearray([cmd]))
-        self._cs.value(1)
-
+        self._cs.value(self._cs_off)
+ 
     def _write_data(self, data):
         self._dc.value(1)
-        self._cs.value(0)
-        # time.sleep(0.03 )
+        self._cs.value(self._cs_on)
         self._spi.write(bytearray([data]))
-        self._cs.value(1)
+        self._cs.value(self._cs_off)
 
     def _write_data_bytes(self, buf):
         self._dc.value(1)
-        self._cs.value(0)
-        # time.sleep(0.03 )
+        self._cs.value(self._cs_on)
         self._spi.write(buf)
-        self._cs.value(1)
+        self._cs.value(self._cs_off)
 
     # 行刷新下，最严重的瓶颈，刷新一次屏幕动辄需要调用上千次
     # 此瓶颈可以转移到处理数据，不过mpy+PSRAM+数据处理，瓶颈更严重
@@ -147,11 +155,10 @@ class LCD:
         y0 = self._height - 1 - y1
         y1 = self._height - 1 - t
 
-        self._cs.value(0)
+        self._cs.value(self._cs_on)
 
         # CASET (0x2A)
         self._dc.value(0)
-        # time.sleep(0.03 )
         self._spi.write(b"\x2a")
         self._dc.value(1)
 
@@ -172,123 +179,65 @@ class LCD:
         buf[1] = x0 & 0xFF
         buf[2] = (x1 >> 8) & 0xFF
         buf[3] = x1 & 0xFF
-        # time.sleep(0.03 ) 
+        # time.sleep(0.03 )
         self._spi.write(buf)
 
         # RAMWR (0x2C)
         self._dc.value(0)
         # time.sleep(0.03 )
         self._spi.write(b"\x2c")
-        self._cs.value(1)
+        self._cs.value(self._cs_off)
 
-    def new_波形区域(x起点, x终点, y起点, y终点):
-        pass
 
     # data和线条是列表
     def append(data, 线条色, 背景色):
         pass
 
-    # ------- 颜色 -------
     class color:
-        # 基础明暗层次    背景、文字、边框
-        class 基础灰阶:
-            白 = None
-            黑 = None
-            雾灰 = None
-            浅灰 = None
-            中灰 = None
-            深灰 = None
-            石墨 = None
+        # ---- 基础灰阶 ----
+        白 = None
+        黑 = None
+        浅灰 = None
+        中灰 = None
+        深灰 = None
 
-        # 功能状态反馈    按钮、状态灯、提示
-        class 语义:
-            主题蓝 = None
-            成功绿 = None
-            警告黄 = None
-            危险红 = None
-            信息青 = None
-            链接蓝 = None
+        # ---- 功能语义 ----
+        蓝 = None      # 主题 / 信息
+        绿 = None      # 成功 / 正常
+        黄 = None      # 警告
+        红 = None      # 错误 / 危险
+        青 = None      # 提示 /  辅助
 
-        # 高亮、视觉提示  图表、警示、临时高亮
-        class 亮彩:
-            红 = None
-            橙 = None
-            琥珀 = None
-            金黄 = None
-            柠黄 = None
-            草绿 = None
-            薄荷 = None
-            青色 = None
-            天青 = None
-            天蓝 = None
-            海蓝 = None
-            紫 = None
-            洋红 = None
-            粉 = None
+        # ---- 高亮 / 强调 ----
+        橙 = None
+        紫 = None
+        粉 = None
 
-        # 背景与低对比主题    主界面、面板
-        class 柔和:
-            雾霾蓝 = None
-            奶油白 = None
-            豆沙绿 = None
-            藕粉 = None
-            葡萄紫 = None
-
-        # 自然质感与工业风    专用主题、硬件UI
-        class 大地:
-            棕 = None
-            巧克力 = None
-            卡其 = None
-            橄榄 = None
 
     # 为了方便点出来的情况下兼容2字节或3字节的像素格式
     def _init_color(self):
-        # —— 基础与灰阶 ——
-        self.color.基础灰阶.白 = self.color_fn(255, 255, 255)
-        self.color.基础灰阶.黑 = self.color_fn(0, 0, 0)
-        self.color.基础灰阶.雾灰 = self.color_fn(224, 224, 224)
-        self.color.基础灰阶.浅灰 = self.color_fn(192, 192, 192)
-        self.color.基础灰阶.中灰 = self.color_fn(128, 128, 128)
-        self.color.基础灰阶.深灰 = self.color_fn(64, 64, 64)
-        self.color.基础灰阶.石墨 = self.color_fn(32, 40, 48)
+        c = self.color
+        cf = self.color_fn
 
-        # —— 语义 / UI 常用 ——
-        self.color.语义.主题蓝 = self.color_fn(32, 120, 232)
-        self.color.语义.成功绿 = self.color_fn(48, 168, 88)
-        self.color.语义.警告黄 = self.color_fn(248, 200, 64)
-        self.color.语义.危险红 = self.color_fn(232, 56, 64)
-        self.color.语义.信息青 = self.color_fn(0, 168, 200)
-        self.color.语义.链接蓝 = self.color_fn(40, 120, 232)
+        # 基础灰阶
+        c.白 = cf(255, 255, 255)
+        c.黑 = cf(0, 0, 0)
+        c.浅灰 = cf(192, 192, 192)
+        c.中灰 = cf(128, 128, 128)
+        c.深灰 = cf(64, 64, 64)
 
-        # —— 亮彩（高清晰提示用） ——
-        self.color.亮彩.红 = self.color_fn(232, 56, 56)
-        self.color.亮彩.橙 = self.color_fn(248, 144, 48)
-        self.color.亮彩.琥珀 = self.color_fn(240, 176, 48)
-        self.color.亮彩.金黄 = self.color_fn(248, 208, 64)
-        self.color.亮彩.柠黄 = self.color_fn(232, 232, 80)
-        self.color.亮彩.草绿 = self.color_fn(88, 200, 88)
-        self.color.亮彩.薄荷 = self.color_fn(144, 232, 200)
-        self.color.亮彩.青色 = self.color_fn(0, 168, 168)
-        self.color.亮彩.天青 = self.color_fn(64, 184, 232)
-        self.color.亮彩.天蓝 = self.color_fn(72, 136, 248)
-        self.color.亮彩.海蓝 = self.color_fn(16, 96, 200)
-        self.color.亮彩.紫 = self.color_fn(152, 88, 208)
-        self.color.亮彩.洋红 = self.color_fn(232, 64, 160)
-        self.color.亮彩.粉 = self.color_fn(248, 176, 192)
+        # 功能语义
+        c.蓝 = cf(32, 120, 232)
+        c.绿 = cf(48, 168, 88)
+        c.黄 = cf(248, 200, 64)
+        c.红 = cf(232, 56, 64)
+        c.青 = cf(0, 168, 200)
 
-        # —— 柔和 / 莫兰迪风 ——
-        self.color.柔和.雾霾蓝 = self.color_fn(160, 176, 192)
-        self.color.柔和.奶油白 = self.color_fn(248, 240, 224)
-        self.color.柔和.豆沙绿 = self.color_fn(168, 184, 136)
-        self.color.柔和.藕粉 = self.color_fn(232, 184, 192)
-        self.color.柔和.葡萄紫 = self.color_fn(120, 72, 160)
-
-        # —— 大地色 ——
-        self.color.大地.棕 = self.color_fn(136, 88, 56)
-        self.color.大地.巧克力 = self.color_fn(120, 72, 48)
-        self.color.大地.卡其 = self.color_fn(200, 176, 120)
-        self.color.大地.橄榄 = self.color_fn(128, 136, 56)
-
+        # 高亮 / 强调
+        c.橙 = cf(248, 144, 48)
+        c.紫 = cf(152, 88, 208)
+        c.粉 = cf(248, 176, 192)
+        
     def _color565(self, r, g=0, b=0):
         if isinstance(r, (tuple, list)):
             r, g, b = r[:3]
@@ -305,6 +254,48 @@ class LCD:
             r, g, b = r[:3]
         return bytes([r, g, b])
 
+    def test(self):
+        buf = bytearray()
+        for i in range(self._width):
+            if i == 0 or i == self._width - 1:
+                buf.extend(self.color.白 * self._height)
+                continue
+            buf.extend(
+                self.color.白
+                + self.color.紫 * (self._height - 2)
+                + self.color.白
+            )
+
+        # 显示
+        self._set_window(0, 0, self._width - 1, self._height - 1)
+        self._write_data_bytes(buf)
+
+    def test_spi(self):
+        ret = []
+        
+        # 测试SPI速率
+        t1 = self.color.紫 * self._width * self._height
+        t2 = self.color.粉 * self._width * self._height
+        t3 = memoryview(t1)
+        t4 = memoryview(t2)
+
+        self._set_window(0,0,self._width-1,self._height-1)
+        self._cs.value(self._cs_on)
+        self._dc.value(1)
+        for _ in range(20):
+            s = time.ticks_ms()
+            self._write_data_bytes(t3)
+            tt = time.ticks_ms() - s
+            ret.append(tt)
+            
+            s = time.ticks_ms()
+            self._write_data_bytes(t4)
+            tt = time.ticks_ms() - s
+            ret.append(tt)
+
+        self._cs.value(self._cs_off)
+        return ret
+
     # ------- 显示 -------
     def fill(self, color):
         self._set_window(0, 0, self._width - 1, self._height - 1)
@@ -315,9 +306,9 @@ class LCD:
     # @timeit
     # 别忘了，列刷新可以加快速度，下次重写一下
     def txt(self, 字符串, x, y, size, 字体色, 背景色, 缓存):
-        if y +size > self._height:
+        if y + size > self._height:
             return
-        
+
         for 字 in 字符串:
             # 字符不存在
             if 字 not in self._char.get(size, {}):
@@ -330,11 +321,9 @@ class LCD:
             else:
                 w = size
 
-            
             if x + w > self._width:
                 return
-            
-            
+
             self._set_window(x, y, x + w - 1, y + size - 1)
             x += w  # 下一次横轴偏移
 
@@ -353,7 +342,6 @@ class LCD:
             if 缓存:
                 self._char_缓存[key] = bytes(self._char_buf[0 : w * size * len(字体色)])
             self._write_data_bytes(self._char_缓存[key])
-
 
     # ------- 字体 -------
     class def_字符:
@@ -519,7 +507,8 @@ class LCD:
 
         self._char_缓存[key] = dst
 
-    def new_波形( self,
+    def new_波形(
+        self,
         w起点: int,
         h起点: int,
         size_w: int,
@@ -528,9 +517,12 @@ class LCD:
         多少格: int,
         max: list,
         波形色: list,
-        背景色: bytes,):
-        return 波形(self,w起点,h起点,size_w,size_h,波形像素,多少格,max,波形色,背景色)
-        
+        背景色: bytes,
+    ):
+        return 波形(
+            self, w起点, h起点, size_w, size_h, 波形像素, 多少格, max, 波形色, 背景色
+        )
+
 
 class 波形:
     # size == 宽 * 高 * 单像素字节
@@ -569,13 +561,14 @@ class 波形:
         self._多少格 = 多少格
         self._max = max
         self._允许的最大下标 = self._size_h - self._波形像素
-        
+
     def 更新(self):
         self._st._set_window(self._w起点, self._h起点, self._w终点, self._h终点)
         if self._当前下标 != self._size:
             self._st._write_data_bytes(self._mv[self._当前下标 : self._size])
         if self._当前下标 > 0:
             self._st._write_data_bytes(self._mv[0 : self._当前下标])
+
     def append_data(self, data: list) -> None:
         # 生成背景色
         td = bytearray(self._背景色 * self._size_h)
@@ -592,7 +585,7 @@ class 波形:
         for i in range(len(data)):
             # 数据映射到下标
             index = data[i] / self._max[i] * self._允许的最大下标
-            
+
             # # 限幅，防止传入数据超过幅值
             # if index > self._允许的最大下标:
             #     index = self._允许的最大下标
@@ -600,18 +593,18 @@ class 波形:
             #     index = 0
 
             # 每个像素多少个字节做一下偏移
-            index = int(index)  * self._size_byte
+            index = int(index) * self._size_byte
 
             # 数据更新到背景色中
             td[index : index + self._波形len] = self._波形色[i]
-        
+
         # # 查看有无，不合理数据
         # if len(td) > self._size_h * self._size_byte:
         #     udp.send("ERROR")
         #     return
-        
+
         self._append(td)
-        
+
     # 单次追加数据越多越慢
     # 波形显示一般宽大于高,直接用这个
     def _append(self, data: bytes) -> None:
@@ -635,41 +628,3 @@ class 波形:
 
     def _get_all_data(self):
         return self._mv[self._当前下标 : self._size], self._mv[0 : self._当前下标]
-
-# def test():
-#     from time import ticks_ms, ticks_diff    
-#     每列多少像素 =  b'a' * 3 * 200   # 高
-#     波形区域多少列 =  50    # 宽
-#     测试次数 =    2
-    
-#     t = 环形内存(波形区域多少列 * len(每列多少像素))
-    
-#     append耗时 = 0
-#     get_all_data耗时 = 0
-
-#     for i in range(测试次数):
-#         for i in range(波形区域多少列):
-#             t0 = ticks_ms()
-#             t.append_mv(每列多少像素)  # 每次追加 940 字节数据
-#             append耗时 += ticks_diff(ticks_ms(), t0)
-#             t0 = ticks_ms()
-#             _ = t.get_all_data()
-#             get_all_data耗时 += ticks_diff(ticks_ms(), t0)
-#         print(f"append_mv数据量、测试测数、耗时ms:{
-#             len(每列多少像素),波形区域多少列,append耗时}")
-#         append耗时 = 0
-
-#     for i in range(测试次数):
-#         for i in range(波形区域多少列):
-#             t0 = ticks_ms()
-#             t.append(每列多少像素)  # 每次追加 940 字节数据
-#             append耗时 += ticks_diff(ticks_ms(), t0)
-#             t0 = ticks_ms()
-#             _ = t.get_all_data()
-#             get_all_data耗时 += ticks_diff(ticks_ms(), t0)
-#         print(f"append数据量、测试测数、耗时ms:{
-#             len(每列多少像素),波形区域多少列,append耗时}")
-#         append耗时 = 0
-
-
-# test()
