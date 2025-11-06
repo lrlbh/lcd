@@ -30,21 +30,43 @@ st = st7789.ST7789(
 )._init()  # .load_bmf("/no_delete/270度左旋转几个字符.bmf")
 
 # 刷新屏幕速度测试
-udp.send(st.test_spi())
+udp.send(st._test_spi())
 
 # 边框测试
-st.test()
+st._test()
 
+st.fill(st.color.橙)
 # 字体测试
 st.txt(
-    "阿斯顿asd",
-    x=10,
-    y=10,
+    "阿斯顿asdaaaadddd",
+    x=1,
+    y=0,
     size=32,
     字体色=st.color.白,
     背景色=st.color.黑,
     缓存=True,
 )
+
+st.txt(
+    "阿斯顿asdaaaadddd",
+    x=0,
+    y=32,
+    size=32,
+    字体色=st.color.白,
+    背景色=st.color.黑,
+    缓存=True,
+)
+
+st.txt(
+    "阿斯顿asdaaaadddd",
+    x=1,
+    y=320-32,
+    size=32,
+    字体色=st.color.白,
+    背景色=st.color.黑,
+    缓存=True,
+)
+
 
 # 驱动对象2
 TE = 21
@@ -60,11 +82,11 @@ st1 = st7789.ST7789(
 )._init()  # .load_bmf("/no_delete/270度左旋转几个字符.bmf")
 
 # 刷新屏幕速度测试
-udp.send(st1.test_spi())
+udp.send(st1._test_spi())
 
 # 边框测试
-st1.test()
-
+st1._test()
+ 
 # 字体测试
 st1.txt(
     "阿斯顿asd",
