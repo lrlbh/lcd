@@ -1,19 +1,87 @@
 import time
-import asyncio
 from machine import Pin
-
-# import gc
 import struct
-from lib import udp
+
+
+
 
 
 class LCD:
+        
+    # 加速set_window
+    _window缓存 = bytearray(4)
+
+    # 加速点阵数据转像素数据
+    _char_buf = bytearray(72 * 72 * 3)
+    
+    # 像素数据
+    # char_缓存[(背景色,字体色,字,字号)] = bytes
+    _char_缓存 = {}
+    
+    # 点阵数据
+    # 列刷新字体需要 --> 左旋270 || 右旋90
+    # 字库：char[size][字] = 点位图
+    _char = {}
+    _char[32] = {}
+    
+
+    # 方便测试，随便预设几个字符
+    _char[32]["阿"] = bytes([
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x7F,0xFF,0xFF,0xF0,
+        0x00,0x00,0x00,0x10,0x00,0x40,0x00,0x10,0x00,0x40,0x10,0x10,0x01,0xC0,0x2E,0x10,
+        0x01,0xC0,0xC3,0x90,0x00,0xFF,0x80,0xF0,0x00,0x7E,0x00,0x38,0x00,0x00,0x00,0x10,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x20,0x00,0x7F,0xF8,0x20,0x00,0x08,0x08,0x20,
+        0x00,0x08,0x08,0x20,0x00,0x08,0x08,0x20,0x00,0x08,0x08,0x20,0x00,0x3F,0xF8,0x20,
+        0x08,0x1F,0xFC,0x20,0x10,0x00,0x08,0x20,0x10,0x00,0x00,0x20,0x30,0x00,0x00,0x20,
+        0x30,0x00,0x00,0x20,0x3F,0xFF,0xFF,0xE0,0x1F,0xFF,0xFF,0xE0,0x00,0x00,0x00,0x30,
+        0x00,0x00,0x00,0x38,0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+    ])
+    _char[32]["斯"] = bytes([
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x20,0x10,0x00,0x80,0x20,0x10,0x00,0x80,
+        0x18,0x10,0x00,0x80,0x0C,0x10,0x00,0x80,0x06,0x1F,0xFF,0xFC,0x03,0x9F,0xFF,0xF8,
+        0x01,0x91,0x08,0x88,0x00,0x11,0x08,0x80,0x00,0x11,0x08,0x80,0x00,0x51,0x08,0x80,
+        0x00,0x91,0x08,0x80,0x41,0x9F,0xFF,0xFC,0x2F,0x10,0x00,0x88,0x36,0x10,0x00,0x80,
+        0x18,0x18,0x00,0xC0,0x0E,0x10,0x00,0x80,0x03,0x80,0x00,0x00,0x01,0xFF,0xFF,0xE0,
+        0x00,0x1F,0xFF,0xE0,0x00,0x00,0x20,0x20,0x00,0x00,0x20,0x20,0x00,0x00,0x20,0x20,
+        0x00,0x00,0x20,0x20,0x7F,0xFF,0xE0,0x10,0x3F,0xFF,0xE0,0x10,0x00,0x00,0x20,0x18,
+        0x00,0x00,0x30,0x18,0x00,0x00,0x20,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+    ])
+    _char[32]["顿"] = bytes([
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x04,0x01,0x00,0x00,0x0F,0xF9,0x00,
+        0x00,0x04,0x01,0x00,0x00,0x04,0x01,0x00,0x00,0x04,0x01,0x00,0x0F,0xFF,0xFF,0xFC,
+        0x1F,0xFF,0xFF,0xF8,0x0C,0x04,0x01,0x00,0x06,0x04,0x01,0x00,0x02,0x04,0x01,0x00,
+        0x41,0x0F,0xF9,0x00,0x41,0x07,0xF9,0x80,0x20,0x80,0x01,0x08,0x20,0x00,0x00,0x08,
+        0x10,0xFF,0xFF,0x08,0x10,0x7F,0xFE,0x08,0x08,0x00,0x02,0x08,0x0C,0x00,0x02,0x08,
+        0x07,0x00,0x03,0x08,0x01,0xFE,0x12,0xF8,0x00,0x7F,0xE2,0x38,0x01,0x00,0x22,0x08,
+        0x01,0x00,0x02,0x08,0x02,0x00,0x02,0x08,0x06,0x00,0x02,0x08,0x0C,0x7F,0xFF,0x08,
+        0x38,0x00,0x02,0x0C,0x78,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+    ])
+    _char[32]["a"] = bytes([
+        0x00,0x00,0x00,0x00,0x03,0xC0,0x00,0x00,0x07,0xE3,0x80,0x00,0x0C,0x33,0xC0,0x00,
+        0x08,0x10,0x40,0x00,0x08,0x18,0x20,0x00,0x08,0x08,0x20,0x00,0x08,0x08,0x20,0x00,
+        0x08,0x08,0x20,0x00,0x04,0x08,0x20,0x00,0x04,0x04,0x60,0x00,0x07,0xFF,0xC0,0x00,
+        0x0F,0xFF,0x80,0x00,0x08,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x06,0x00,0x00,0x00
+    ])
+    _char[32]["s"] = bytes([
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x0F,0x80,0x00,0x00,
+        0x06,0x07,0x80,0x00,0x04,0x0F,0xC0,0x00,0x08,0x0C,0x60,0x00,0x08,0x18,0x20,0x00,
+        0x08,0x18,0x20,0x00,0x08,0x38,0x20,0x00,0x08,0x30,0x20,0x00,0x0C,0x70,0x40,0x00,
+        0x07,0xE0,0xC0,0x00,0x03,0xC3,0xE0,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+    ])
+    _char[32]["d"] = bytes([
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFE,0x00,0x00,0x03,0xFF,0x80,0x00,
+        0x06,0x01,0xC0,0x00,0x0C,0x00,0x60,0x00,0x08,0x00,0x20,0x00,0x08,0x00,0x20,0x00,
+        0x08,0x00,0x20,0x00,0x04,0x00,0x20,0x40,0x02,0x00,0x40,0x40,0x0F,0xFF,0xFF,0xC0,
+        0x07,0xFF,0xFF,0xE0,0x04,0x00,0x00,0x00,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+    ])
+    
+    
     def __init__(self, spi, cs, dc, rst, bl,
                  旋转, color_bit, w, h, 逆CS):
         self._spi = spi
         self._cs = Pin(cs, Pin.OUT)
         self._dc = Pin(dc, Pin.OUT)
-        
+
         # 复位
         if rst is not None:
             self._rst = Pin(rst, Pin.OUT)
@@ -41,13 +109,15 @@ class LCD:
         # 不同色彩需要数据不同
         if self.__color_bit == 16:
             self.color_fn = self._color565
+            self.color = 预设色16位
         elif self.__color_bit == 18:
             self.color_fn = self._color666
+            self.color = 预设色24位
         elif self.__color_bit == 24:
             self.color_fn = self._color888
+            self.color = 预设色24位
         else:
             raise ValueError("色彩位数有误")
-        self._init_color()
 
         # 如果SPI只驱动了两个设备，可以省略CS
         self._cs_on = 0
@@ -55,18 +125,8 @@ class LCD:
         if 逆CS:
             self._cs_on = 1
             self._cs_off = 0
+            
 
-        # 字库：char[size][字] = 点位图
-        self._char = {}
-
-        # char_缓存[(背景色,字体色,字,字号)] = bytes
-        self._char_缓存 = {}
-
-        # 加速set_window
-        self._window缓存 = bytearray(4)
-
-        # 加速显示字符，最大支持字体 72 * 72
-        self._char_buf = bytearray(72 * 72 * len(self.color_fn(0, 0, 0)))
 
     def _init(self):
         raise ValueError("init未实现！")
@@ -162,7 +222,7 @@ class LCD:
         self._spi.write(b"\x2a")
         self._dc.value(1)
 
-        buf = self._window缓存  # 预分配好的 4 字节缓存
+        buf = LCD._window缓存  # 预分配好的 4 字节缓存
         buf[0] = (y0 >> 8) & 0xFF
         buf[1] = y0 & 0xFF
         buf[2] = (y1 >> 8) & 0xFF
@@ -193,50 +253,8 @@ class LCD:
     def append(data, 线条色, 背景色):
         pass
 
-    class color:
-        # ---- 基础灰阶 ----
-        白 = None
-        黑 = None
-        浅灰 = None
-        中灰 = None
-        深灰 = None
-
-        # ---- 功能语义 ----
-        蓝 = None      # 主题 / 信息
-        绿 = None      # 成功 / 正常
-        黄 = None      # 警告
-        红 = None      # 错误 / 危险
-        青 = None      # 提示 /  辅助
-
-        # ---- 高亮 / 强调 ----
-        橙 = None
-        紫 = None
-        粉 = None
 
 
-    # 为了方便点出来的情况下兼容2字节或3字节的像素格式
-    def _init_color(self):
-        c = self.color
-        cf = self.color_fn
-
-        # 基础灰阶
-        c.白 = cf(255, 255, 255)
-        c.黑 = cf(0, 0, 0)
-        c.浅灰 = cf(192, 192, 192)
-        c.中灰 = cf(128, 128, 128)
-        c.深灰 = cf(64, 64, 64)
-
-        # 功能语义
-        c.蓝 = cf(32, 120, 232)
-        c.绿 = cf(48, 168, 88)
-        c.黄 = cf(248, 200, 64)
-        c.红 = cf(232, 56, 64)
-        c.青 = cf(0, 168, 200)
-
-        # 高亮 / 强调
-        c.橙 = cf(248, 144, 48)
-        c.紫 = cf(152, 88, 208)
-        c.粉 = cf(248, 176, 192)
         
     def _color565(self, r, g=0, b=0):
         if isinstance(r, (tuple, list)):
@@ -254,6 +272,7 @@ class LCD:
             r, g, b = r[:3]
         return bytes([r, g, b])
 
+    # 方框测试
     def test(self):
         buf = bytearray()
         for i in range(self._width):
@@ -270,6 +289,7 @@ class LCD:
         self._set_window(0, 0, self._width - 1, self._height - 1)
         self._write_data_bytes(buf)
 
+    # 更新速度测试
     def test_spi(self):
         ret = []
         
@@ -296,7 +316,7 @@ class LCD:
         self._cs.value(self._cs_off)
         return ret
 
-    # ------- 显示 -------
+    # 清屏
     def fill(self, color):
         self._set_window(0, 0, self._width - 1, self._height - 1)
         # 一次性铺满
@@ -311,11 +331,11 @@ class LCD:
 
         for 字 in 字符串:
             # 字符不存在
-            if 字 not in self._char.get(size, {}):
+            if 字 not in LCD._char.get(size, {}):
                 字 = " "
 
             key = (字, size, 字体色, 背景色)  # 缓存key
-            self._char_buf[:] = b""  # 清理buf
+            LCD._char_buf[:] = b""  # 清理buf
             if ord(字) < 128:  # 小写半半宽
                 w = size // 2
             else:
@@ -328,20 +348,20 @@ class LCD:
             x += w  # 下一次横轴偏移
 
             # 有缓存
-            if key in self._char_缓存:
-                self._write_data_bytes(self._char_缓存[key])
+            if key in LCD._char_缓存:
+                self._write_data_bytes(LCD._char_缓存[key])
                 continue
 
             # 无缓存
-            for byte in self._char[size][字]:
+            for byte in LCD._char[size][字]:
                 for bit in range(8):
                     if byte & (1 << (7 - bit)):
-                        self._char_buf.extend(字体色)
+                        LCD._char_buf.extend(字体色)
                     else:
-                        self._char_buf.extend(背景色)
+                        LCD._char_buf.extend(背景色)
             if 缓存:
-                self._char_缓存[key] = bytes(self._char_buf[0 : w * size * len(字体色)])
-            self._write_data_bytes(self._char_缓存[key])
+                LCD._char_缓存[key] = bytes(LCD._char_buf[0 : w * size * len(字体色)])
+            self._write_data_bytes(LCD._char_缓存[key])
 
     # ------- 字体 -------
     class def_字符:
@@ -350,7 +370,7 @@ class LCD:
         all = ascii + 常用字符
 
     def _load_bmf(self, path, 需要的字符):
-        self._char = {}
+        LCD._char = {}
         # size = os.stat(path)[6]
 
         # f.readinto(buf)  # **不改读取方式**
@@ -376,7 +396,7 @@ class LCD:
                 if [] != 需要的字符 and 当前字号 not in 需要的字符:
                     # print("字号",当前字号)
                     continue
-                self._char[当前字号] = {}
+                LCD._char[当前字号] = {}
                 buf = bytearray(当前字号数据大小)
                 f.readinto(buf)
                 点阵长度 = 当前字号 * 当前字号 // 8
@@ -387,10 +407,10 @@ class LCD:
                     ch = chr(int.from_bytes(buf[idx : idx + 4], "little"))
                     idx += 4
                     if ord(ch) < 128:
-                        self._char[当前字号][ch] = buf[idx : idx + 点阵长度_ascii]
+                        LCD._char[当前字号][ch] = buf[idx : idx + 点阵长度_ascii]
                         idx += 点阵长度_ascii
                     else:
-                        self._char[当前字号][ch] = buf[idx : idx + 点阵长度]
+                        LCD._char[当前字号][ch] = buf[idx : idx + 点阵长度]
                         idx += 点阵长度
 
     def _load_bmf_select(self, path, 需要的字符):
@@ -433,13 +453,13 @@ class LCD:
                 off_range[字号] = (off_start, off_end)
 
             # —— 遍历“需要的字符”，按需抽取 ——
-            self._char = {}
+            LCD._char = {}
             for 字号, 文本 in 需要的字符.items():
                 if 字号 not in idx_range:
                     continue
                 idx_start, idx_end = idx_range[字号]
                 off_start, off_end = off_range[字号]
-                self._char[字号] = {}
+                LCD._char[字号] = {}
 
                 ascii点阵长度 = (字号 * 字号) // 16
                 点阵长度 = (字号 * 字号) // 8
@@ -463,9 +483,9 @@ class LCD:
 
                     # 按你的规则：ASCII 半宽，其余全宽
                     if ord(字符) < 128:
-                        self._char[字号][字符] = f.read(ascii点阵长度)
+                        LCD._char[字号][字符] = f.read(ascii点阵长度)
                     else:
-                        self._char[字号][字符] = f.read(点阵长度)
+                        LCD._char[字号][字符] = f.read(点阵长度)
 
     # 参数格式
     # {16:"sada",32:"asdas"}
@@ -486,9 +506,11 @@ class LCD:
         else:
             raise TypeError('load_bmf 参数有误！ 需要: "all" or {} ')
 
+        return self
+
     # 旋转像素
     def _rotate_char_left_90(self, key):
-        src = self._char_缓存[key]
+        src = LCD._char_缓存[key]
 
         # 根据 key 里的 size 推宽高（你这里自己写）
         size = key[1]
@@ -505,7 +527,7 @@ class LCD:
                 i_dst = ((w - 1 - x) * h + y) * pixel_size
                 dst[i_dst : i_dst + pixel_size] = src[i_src : i_src + pixel_size]
 
-        self._char_缓存[key] = dst
+        LCD._char_缓存[key] = dst
 
     def new_波形(
         self,
@@ -522,6 +544,50 @@ class LCD:
         return 波形(
             self, w起点, h起点, size_w, size_h, 波形像素, 多少格, max, 波形色, 背景色
         )
+
+
+
+class 预设色16位:
+    # ---- 基础灰阶 ----
+    白   = b'\xff\xff'  # (255,255,255)
+    黑   = b'\x00\x00'  # (0,0,0)
+    浅灰 = b'\xc6\x18'  # (192,192,192)
+    中灰 = b'\x84\x10'  # (128,128,128)
+    深灰 = b'\x42\x08'  # (64,64,64)
+
+    # ---- 功能语义 ----
+    蓝   = b'\x53\x1d'  # (32,120,232)
+    绿   = b'\x25\x91'  # (48,168,88)
+    黄   = b'\xe3\xac'  # (248,200,64)
+    红   = b'\xc8\xb1'  # (232,56,64)
+    青   = b'\x04\x9f'  # (0,168,200)
+
+    # ---- 高亮 / 强调 ----
+    橙   = b'\x87\xec'  # (248,144,48)
+    紫   = b'\x92\x99'  # (152,88,208)
+    粉   = b'\xf9\xd1'  # (248,176,192)
+
+
+class 预设色24位:
+    # ---- 基础灰阶 ----
+    白   = b'\xff\xff\xff'  # (255,255,255)
+    黑   = b'\x00\x00\x00'  # (0,0,0)
+    浅灰 = b'\xc0\xc0\xc0'  # (192,192,192)
+    中灰 = b'\x80\x80\x80'  # (128,128,128)
+    深灰 = b'\x40\x40\x40'  # (64,64,64)
+
+    # ---- 功能语义 ----
+    蓝   = b'\x20\x78\xe8'  # (32,120,232)
+    绿   = b'\x30\xa8\x58'  # (48,168,88)
+    黄   = b'\xf8\xc8\x40'  # (248,200,64)
+    红   = b'\xe8\x38\x40'  # (232,56,64)
+    青   = b'\x00\xa8\xc8'  # (0,168,200)
+
+    # ---- 高亮 / 强调 ----
+    橙   = b'\xf8\x90\x30'  # (248,144,48)
+    紫   = b'\x98\x58\xd0'  # (152,88,208)
+    粉   = b'\xf8\xb0\xc0'  # (248,176,192)
+
 
 
 class 波形:
