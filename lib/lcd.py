@@ -857,19 +857,18 @@ class LCD:
         # 一次性铺满
         self._write_data_bytes(color * (self._width * self._height))
 
-
     def txt(self, 字符串, x, y, size, 字体色, 背景色, 缓存):
         # s = time.ticks_us()
-        
+
         # 终点字符，终点坐标
-        str_len = 0         # 终点字符
-        w = x-1             # 终点坐标
-        h = y + size -1     # 终点坐标
-        
+        str_len = 0  # 终点字符
+        w = x - 1  # 终点坐标
+        h = y + size - 1  # 终点坐标
+
         # 非法高度
-        if h >= self._height: 
+        if h >= self._height:
             return
-        
+
         # 计算终点字符，终点坐标
         for i, 字 in enumerate(字符串):
             # 字符不存在用空格
@@ -884,10 +883,9 @@ class LCD:
             # 超出显示范围，截断字符串
             if w + t_w >= self._width:
                 break
-            str_len+=1                    
-            w +=t_w
+            str_len += 1
+            w += t_w
 
-        
         # 设置显示范围
         self._set_window(x, y, w, h)
 
@@ -908,19 +906,16 @@ class LCD:
                         LCD._char_buf.extend(字体色)
                     else:
                         LCD._char_buf.extend(背景色)
-                        
-            #是否加入缓存
+
+            # 是否加入缓存
             if 缓存:
                 LCD._char_缓存[key] = bytes(LCD._char_buf[0 : w * size * len(字体色)])
-            
+
             # 无缓存显示
             self._write_data_bytes(LCD._char_缓存[key])
 
-        # udp.send(time.ticks_us()-s)  
-    
-    
-    
-    
+        # udp.send(time.ticks_us()-s)
+
     # ------- 字体 -------
     class def_字符:
         ascii = """ 1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ~·！@#￥%……&*（）——++-=、|【{}】；：‘“，《。》/？*~!@#$%^&*()-_=+[{}]\|;:'",<.>/?/*"""
@@ -1093,57 +1088,26 @@ class LCD:
         h起点: int,
         size_w: int,
         size_h: int,
-        波形像素: int,
         多少格: int,
+        波形像素: list,
+        min: list,
         max: list,
         波形色: list,
         背景色: bytes,
     ):
         return 波形(
-            self, w起点, h起点, size_w, size_h, 波形像素, 多少格, max, 波形色, 背景色
+            self,
+            w起点,
+            h起点,
+            size_w,
+            size_h,
+            多少格,
+            波形像素,
+            min,
+            max,
+            波形色,
+            背景色,
         )
-
-
-class 预设色16位:
-    # ---- 基础灰阶 ----
-    白   = b"\xff\xff"  # FFFF
-    黑   = b"\x00\x00"  # 0000
-    浅灰 = b"\xc6\x18"  # C618
-    中灰 = b"\x84\x10"  # 8410
-    深灰 = b"\x42\x08"  # 4208
-
-    # ---- 功能语义 ----
-    蓝   = b"\x23\xdd"  # 237D?（实际：23DD）
-    绿   = b"\x35\x4b"  # 354B
-    黄   = b"\xfe\x48"  # FE48
-    红   = b"\xe9\xc8"  # E9C8
-    青   = b"\x05\x59"  # 0559
-
-    # ---- 高亮 / 强调 ----
-    橙   = b"\xfc\x86"  # ← 正确橙色 FC86  (RGB 248,144,48)
-    紫   = b"\x9a\xda"  # 9ADA
-    粉   = b"\xfd\x98"  # FD98
-
-
-class 预设色24位:
-    # ---- 基础灰阶 ----
-    白 = b"\xff\xff\xff"  # (255,255,255)
-    黑 = b"\x00\x00\x00"  # (0,0,0)
-    浅灰 = b"\xc0\xc0\xc0"  # (192,192,192)
-    中灰 = b"\x80\x80\x80"  # (128,128,128)
-    深灰 = b"\x40\x40\x40"  # (64,64,64)
-
-    # ---- 功能语义 ----
-    蓝 = b"\x20\x78\xe8"  # (32,120,232)
-    绿 = b"\x30\xa8\x58"  # (48,168,88)
-    黄 = b"\xf8\xc8\x40"  # (248,200,64)
-    红 = b"\xe8\x38\x40"  # (232,56,64)
-    青 = b"\x00\xa8\xc8"  # (0,168,200)
-
-    # ---- 高亮 / 强调 ----
-    橙 = b"\xf8\x90\x30"  # (248,144,48)
-    紫 = b"\x98\x58\xd0"  # (152,88,208)
-    粉 = b"\xf8\xb0\xc0"  # (248,176,192)
 
 
 class 波形:
@@ -1156,8 +1120,9 @@ class 波形:
         h起点: int,
         size_w: int,
         size_h: int,
-        波形像素: int,
         多少格: int,
+        波形像素: list,
+        min: list,
         max: list,
         波形色: list,
         背景色: bytes,
@@ -1171,18 +1136,23 @@ class 波形:
         self._w终点 = w起点 + size_w - 1
         self._h终点 = h起点 + size_h - 1
         self._波形像素 = 波形像素
-        self._波形len = 波形像素 * self._size_byte
+        self._波形len = []
+        for t in 波形像素:
+            self._波形len.append(t * self._size_byte)
         self._波形色 = []
-        for t in 波形色:
-            self._波形色.append(t * 波形像素)
+        for i, t in enumerate(波形色):
+            self._波形色.append(t * 波形像素[i])
         self._背景色 = 背景色
         self._size = int(size_w * size_h * self._size_byte)
         self._buf = bytearray(self._size)
         self._mv = memoryview(self._buf)
         self._当前下标 = 0  # 最旧字节位置
         self._多少格 = 多少格
+        self._min = min
         self._max = max
-        self._允许的最大下标 = self._size_h - self._波形像素
+        self._允许的最大下标 = []
+        for t in 波形像素:
+            self._允许的最大下标.append( self._size_h - t)
 
     def 更新(self):
         self._st._set_window(self._w起点, self._h起点, self._w终点, self._h终点)
@@ -1206,19 +1176,19 @@ class 波形:
         # 遍历多个输入通道
         for i in range(len(data)):
             # 数据映射到下标
-            index = data[i] / self._max[i] * self._允许的最大下标
-
+            index = (data[i]-self._min[i]) / (self._max[i] - self._min[i]) * self._允许的最大下标[i]
+            
             # # 限幅，防止传入数据超过幅值
-            # if index > self._允许的最大下标:
-            #     index = self._允许的最大下标
-            # if index < 0:
-            #     index = 0
+            if index > self._允许的最大下标[i]:
+                index = self._允许的最大下标[i]
+            if index < 0:
+                index = 0
 
             # 每个像素多少个字节做一下偏移
             index = int(index) * self._size_byte
 
             # 数据更新到背景色中
-            td[index : index + self._波形len] = self._波形色[i]
+            td[index : index + self._波形len[i]] = self._波形色[i]
 
         # # 查看有无，不合理数据
         # if len(td) > self._size_h * self._size_byte:
@@ -1250,3 +1220,45 @@ class 波形:
 
     def _get_all_data(self):
         return self._mv[self._当前下标 : self._size], self._mv[0 : self._当前下标]
+
+
+class 预设色16位:
+    # ---- 基础灰阶 ----
+    白 = b"\xff\xff"  # FFFF
+    黑 = b"\x00\x00"  # 0000
+    浅灰 = b"\xc6\x18"  # C618
+    中灰 = b"\x84\x10"  # 8410
+    深灰 = b"\x42\x08"  # 4208
+
+    # ---- 功能语义 ----
+    蓝 = b"\x23\xdd"  # 237D?（实际：23DD）
+    绿 = b"\x35\x4b"  # 354B
+    黄 = b"\xfe\x48"  # FE48
+    红 = b"\xe9\xc8"  # E9C8
+    青 = b"\x05\x59"  # 0559
+
+    # ---- 高亮 / 强调 ----
+    橙 = b"\xfc\x86"  # ← 正确橙色 FC86  (RGB 248,144,48)
+    紫 = b"\x9a\xda"  # 9ADA
+    粉 = b"\xfd\x98"  # FD98
+
+
+class 预设色24位:
+    # ---- 基础灰阶 ----
+    白 = b"\xff\xff\xff"  # (255,255,255)
+    黑 = b"\x00\x00\x00"  # (0,0,0)
+    浅灰 = b"\xc0\xc0\xc0"  # (192,192,192)
+    中灰 = b"\x80\x80\x80"  # (128,128,128)
+    深灰 = b"\x40\x40\x40"  # (64,64,64)
+
+    # ---- 功能语义 ----
+    蓝 = b"\x20\x78\xe8"  # (32,120,232)
+    绿 = b"\x30\xa8\x58"  # (48,168,88)
+    黄 = b"\xf8\xc8\x40"  # (248,200,64)
+    红 = b"\xe8\x38\x40"  # (232,56,64)
+    青 = b"\x00\xa8\xc8"  # (0,168,200)
+
+    # ---- 高亮 / 强调 ----
+    橙 = b"\xf8\x90\x30"  # (248,144,48)
+    紫 = b"\x98\x58\xd0"  # (152,88,208)
+    粉 = b"\xf8\xb0\xc0"  # (248,176,192)
