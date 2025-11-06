@@ -2,82 +2,629 @@ import time
 from machine import Pin
 import struct
 
-
-
+from lib import udp
 
 
 class LCD:
-        
     # 加速set_window
     _window缓存 = bytearray(4)
 
     # 加速点阵数据转像素数据
     _char_buf = bytearray(72 * 72 * 3)
-    
+
     # 像素数据
     # char_缓存[(背景色,字体色,字,字号)] = bytes
     _char_缓存 = {}
-    
+
     # 点阵数据
     # 列刷新字体需要 --> 左旋270 || 右旋90
     # 字库：char[size][字] = 点位图
     _char = {}
     _char[32] = {}
-    
 
     # 方便测试，随便预设几个字符
-    _char[32]["阿"] = bytes([
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x7F,0xFF,0xFF,0xF0,
-        0x00,0x00,0x00,0x10,0x00,0x40,0x00,0x10,0x00,0x40,0x10,0x10,0x01,0xC0,0x2E,0x10,
-        0x01,0xC0,0xC3,0x90,0x00,0xFF,0x80,0xF0,0x00,0x7E,0x00,0x38,0x00,0x00,0x00,0x10,
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x20,0x00,0x7F,0xF8,0x20,0x00,0x08,0x08,0x20,
-        0x00,0x08,0x08,0x20,0x00,0x08,0x08,0x20,0x00,0x08,0x08,0x20,0x00,0x3F,0xF8,0x20,
-        0x08,0x1F,0xFC,0x20,0x10,0x00,0x08,0x20,0x10,0x00,0x00,0x20,0x30,0x00,0x00,0x20,
-        0x30,0x00,0x00,0x20,0x3F,0xFF,0xFF,0xE0,0x1F,0xFF,0xFF,0xE0,0x00,0x00,0x00,0x30,
-        0x00,0x00,0x00,0x38,0x00,0x00,0x00,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-    ])
-    _char[32]["斯"] = bytes([
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x20,0x10,0x00,0x80,0x20,0x10,0x00,0x80,
-        0x18,0x10,0x00,0x80,0x0C,0x10,0x00,0x80,0x06,0x1F,0xFF,0xFC,0x03,0x9F,0xFF,0xF8,
-        0x01,0x91,0x08,0x88,0x00,0x11,0x08,0x80,0x00,0x11,0x08,0x80,0x00,0x51,0x08,0x80,
-        0x00,0x91,0x08,0x80,0x41,0x9F,0xFF,0xFC,0x2F,0x10,0x00,0x88,0x36,0x10,0x00,0x80,
-        0x18,0x18,0x00,0xC0,0x0E,0x10,0x00,0x80,0x03,0x80,0x00,0x00,0x01,0xFF,0xFF,0xE0,
-        0x00,0x1F,0xFF,0xE0,0x00,0x00,0x20,0x20,0x00,0x00,0x20,0x20,0x00,0x00,0x20,0x20,
-        0x00,0x00,0x20,0x20,0x7F,0xFF,0xE0,0x10,0x3F,0xFF,0xE0,0x10,0x00,0x00,0x20,0x18,
-        0x00,0x00,0x30,0x18,0x00,0x00,0x20,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-    ])
-    _char[32]["顿"] = bytes([
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x04,0x01,0x00,0x00,0x0F,0xF9,0x00,
-        0x00,0x04,0x01,0x00,0x00,0x04,0x01,0x00,0x00,0x04,0x01,0x00,0x0F,0xFF,0xFF,0xFC,
-        0x1F,0xFF,0xFF,0xF8,0x0C,0x04,0x01,0x00,0x06,0x04,0x01,0x00,0x02,0x04,0x01,0x00,
-        0x41,0x0F,0xF9,0x00,0x41,0x07,0xF9,0x80,0x20,0x80,0x01,0x08,0x20,0x00,0x00,0x08,
-        0x10,0xFF,0xFF,0x08,0x10,0x7F,0xFE,0x08,0x08,0x00,0x02,0x08,0x0C,0x00,0x02,0x08,
-        0x07,0x00,0x03,0x08,0x01,0xFE,0x12,0xF8,0x00,0x7F,0xE2,0x38,0x01,0x00,0x22,0x08,
-        0x01,0x00,0x02,0x08,0x02,0x00,0x02,0x08,0x06,0x00,0x02,0x08,0x0C,0x7F,0xFF,0x08,
-        0x38,0x00,0x02,0x0C,0x78,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-    ])
-    _char[32]["a"] = bytes([
-        0x00,0x00,0x00,0x00,0x03,0xC0,0x00,0x00,0x07,0xE3,0x80,0x00,0x0C,0x33,0xC0,0x00,
-        0x08,0x10,0x40,0x00,0x08,0x18,0x20,0x00,0x08,0x08,0x20,0x00,0x08,0x08,0x20,0x00,
-        0x08,0x08,0x20,0x00,0x04,0x08,0x20,0x00,0x04,0x04,0x60,0x00,0x07,0xFF,0xC0,0x00,
-        0x0F,0xFF,0x80,0x00,0x08,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x06,0x00,0x00,0x00
-    ])
-    _char[32]["s"] = bytes([
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x0F,0x80,0x00,0x00,
-        0x06,0x07,0x80,0x00,0x04,0x0F,0xC0,0x00,0x08,0x0C,0x60,0x00,0x08,0x18,0x20,0x00,
-        0x08,0x18,0x20,0x00,0x08,0x38,0x20,0x00,0x08,0x30,0x20,0x00,0x0C,0x70,0x40,0x00,
-        0x07,0xE0,0xC0,0x00,0x03,0xC3,0xE0,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-    ])
-    _char[32]["d"] = bytes([
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFE,0x00,0x00,0x03,0xFF,0x80,0x00,
-        0x06,0x01,0xC0,0x00,0x0C,0x00,0x60,0x00,0x08,0x00,0x20,0x00,0x08,0x00,0x20,0x00,
-        0x08,0x00,0x20,0x00,0x04,0x00,0x20,0x40,0x02,0x00,0x40,0x40,0x0F,0xFF,0xFF,0xC0,
-        0x07,0xFF,0xFF,0xE0,0x04,0x00,0x00,0x00,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-    ])
-    
-    
-    def __init__(self, spi, cs, dc, rst, bl,
-                 旋转, color_bit, w, h, 逆CS):
+    _char[32]["阿"] = bytes(
+        [
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x7F,
+            0xFF,
+            0xFF,
+            0xF0,
+            0x00,
+            0x00,
+            0x00,
+            0x10,
+            0x00,
+            0x40,
+            0x00,
+            0x10,
+            0x00,
+            0x40,
+            0x10,
+            0x10,
+            0x01,
+            0xC0,
+            0x2E,
+            0x10,
+            0x01,
+            0xC0,
+            0xC3,
+            0x90,
+            0x00,
+            0xFF,
+            0x80,
+            0xF0,
+            0x00,
+            0x7E,
+            0x00,
+            0x38,
+            0x00,
+            0x00,
+            0x00,
+            0x10,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x20,
+            0x00,
+            0x7F,
+            0xF8,
+            0x20,
+            0x00,
+            0x08,
+            0x08,
+            0x20,
+            0x00,
+            0x08,
+            0x08,
+            0x20,
+            0x00,
+            0x08,
+            0x08,
+            0x20,
+            0x00,
+            0x08,
+            0x08,
+            0x20,
+            0x00,
+            0x3F,
+            0xF8,
+            0x20,
+            0x08,
+            0x1F,
+            0xFC,
+            0x20,
+            0x10,
+            0x00,
+            0x08,
+            0x20,
+            0x10,
+            0x00,
+            0x00,
+            0x20,
+            0x30,
+            0x00,
+            0x00,
+            0x20,
+            0x30,
+            0x00,
+            0x00,
+            0x20,
+            0x3F,
+            0xFF,
+            0xFF,
+            0xE0,
+            0x1F,
+            0xFF,
+            0xFF,
+            0xE0,
+            0x00,
+            0x00,
+            0x00,
+            0x30,
+            0x00,
+            0x00,
+            0x00,
+            0x38,
+            0x00,
+            0x00,
+            0x00,
+            0x20,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ]
+    )
+    _char[32]["斯"] = bytes(
+        [
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x20,
+            0x10,
+            0x00,
+            0x80,
+            0x20,
+            0x10,
+            0x00,
+            0x80,
+            0x18,
+            0x10,
+            0x00,
+            0x80,
+            0x0C,
+            0x10,
+            0x00,
+            0x80,
+            0x06,
+            0x1F,
+            0xFF,
+            0xFC,
+            0x03,
+            0x9F,
+            0xFF,
+            0xF8,
+            0x01,
+            0x91,
+            0x08,
+            0x88,
+            0x00,
+            0x11,
+            0x08,
+            0x80,
+            0x00,
+            0x11,
+            0x08,
+            0x80,
+            0x00,
+            0x51,
+            0x08,
+            0x80,
+            0x00,
+            0x91,
+            0x08,
+            0x80,
+            0x41,
+            0x9F,
+            0xFF,
+            0xFC,
+            0x2F,
+            0x10,
+            0x00,
+            0x88,
+            0x36,
+            0x10,
+            0x00,
+            0x80,
+            0x18,
+            0x18,
+            0x00,
+            0xC0,
+            0x0E,
+            0x10,
+            0x00,
+            0x80,
+            0x03,
+            0x80,
+            0x00,
+            0x00,
+            0x01,
+            0xFF,
+            0xFF,
+            0xE0,
+            0x00,
+            0x1F,
+            0xFF,
+            0xE0,
+            0x00,
+            0x00,
+            0x20,
+            0x20,
+            0x00,
+            0x00,
+            0x20,
+            0x20,
+            0x00,
+            0x00,
+            0x20,
+            0x20,
+            0x00,
+            0x00,
+            0x20,
+            0x20,
+            0x7F,
+            0xFF,
+            0xE0,
+            0x10,
+            0x3F,
+            0xFF,
+            0xE0,
+            0x10,
+            0x00,
+            0x00,
+            0x20,
+            0x18,
+            0x00,
+            0x00,
+            0x30,
+            0x18,
+            0x00,
+            0x00,
+            0x20,
+            0x10,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ]
+    )
+    _char[32]["顿"] = bytes(
+        [
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x04,
+            0x01,
+            0x00,
+            0x00,
+            0x0F,
+            0xF9,
+            0x00,
+            0x00,
+            0x04,
+            0x01,
+            0x00,
+            0x00,
+            0x04,
+            0x01,
+            0x00,
+            0x00,
+            0x04,
+            0x01,
+            0x00,
+            0x0F,
+            0xFF,
+            0xFF,
+            0xFC,
+            0x1F,
+            0xFF,
+            0xFF,
+            0xF8,
+            0x0C,
+            0x04,
+            0x01,
+            0x00,
+            0x06,
+            0x04,
+            0x01,
+            0x00,
+            0x02,
+            0x04,
+            0x01,
+            0x00,
+            0x41,
+            0x0F,
+            0xF9,
+            0x00,
+            0x41,
+            0x07,
+            0xF9,
+            0x80,
+            0x20,
+            0x80,
+            0x01,
+            0x08,
+            0x20,
+            0x00,
+            0x00,
+            0x08,
+            0x10,
+            0xFF,
+            0xFF,
+            0x08,
+            0x10,
+            0x7F,
+            0xFE,
+            0x08,
+            0x08,
+            0x00,
+            0x02,
+            0x08,
+            0x0C,
+            0x00,
+            0x02,
+            0x08,
+            0x07,
+            0x00,
+            0x03,
+            0x08,
+            0x01,
+            0xFE,
+            0x12,
+            0xF8,
+            0x00,
+            0x7F,
+            0xE2,
+            0x38,
+            0x01,
+            0x00,
+            0x22,
+            0x08,
+            0x01,
+            0x00,
+            0x02,
+            0x08,
+            0x02,
+            0x00,
+            0x02,
+            0x08,
+            0x06,
+            0x00,
+            0x02,
+            0x08,
+            0x0C,
+            0x7F,
+            0xFF,
+            0x08,
+            0x38,
+            0x00,
+            0x02,
+            0x0C,
+            0x78,
+            0x00,
+            0x00,
+            0x08,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ]
+    )
+    _char[32]["a"] = bytes(
+        [
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x03,
+            0xC0,
+            0x00,
+            0x00,
+            0x07,
+            0xE3,
+            0x80,
+            0x00,
+            0x0C,
+            0x33,
+            0xC0,
+            0x00,
+            0x08,
+            0x10,
+            0x40,
+            0x00,
+            0x08,
+            0x18,
+            0x20,
+            0x00,
+            0x08,
+            0x08,
+            0x20,
+            0x00,
+            0x08,
+            0x08,
+            0x20,
+            0x00,
+            0x08,
+            0x08,
+            0x20,
+            0x00,
+            0x04,
+            0x08,
+            0x20,
+            0x00,
+            0x04,
+            0x04,
+            0x60,
+            0x00,
+            0x07,
+            0xFF,
+            0xC0,
+            0x00,
+            0x0F,
+            0xFF,
+            0x80,
+            0x00,
+            0x08,
+            0x00,
+            0x00,
+            0x00,
+            0x08,
+            0x00,
+            0x00,
+            0x00,
+            0x06,
+            0x00,
+            0x00,
+            0x00,
+        ]
+    )
+    _char[32]["s"] = bytes(
+        [
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x0F,
+            0x80,
+            0x00,
+            0x00,
+            0x06,
+            0x07,
+            0x80,
+            0x00,
+            0x04,
+            0x0F,
+            0xC0,
+            0x00,
+            0x08,
+            0x0C,
+            0x60,
+            0x00,
+            0x08,
+            0x18,
+            0x20,
+            0x00,
+            0x08,
+            0x18,
+            0x20,
+            0x00,
+            0x08,
+            0x38,
+            0x20,
+            0x00,
+            0x08,
+            0x30,
+            0x20,
+            0x00,
+            0x0C,
+            0x70,
+            0x40,
+            0x00,
+            0x07,
+            0xE0,
+            0xC0,
+            0x00,
+            0x03,
+            0xC3,
+            0xE0,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ]
+    )
+    _char[32]["d"] = bytes(
+        [
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0xFE,
+            0x00,
+            0x00,
+            0x03,
+            0xFF,
+            0x80,
+            0x00,
+            0x06,
+            0x01,
+            0xC0,
+            0x00,
+            0x0C,
+            0x00,
+            0x60,
+            0x00,
+            0x08,
+            0x00,
+            0x20,
+            0x00,
+            0x08,
+            0x00,
+            0x20,
+            0x00,
+            0x08,
+            0x00,
+            0x20,
+            0x00,
+            0x04,
+            0x00,
+            0x20,
+            0x40,
+            0x02,
+            0x00,
+            0x40,
+            0x40,
+            0x0F,
+            0xFF,
+            0xFF,
+            0xC0,
+            0x07,
+            0xFF,
+            0xFF,
+            0xE0,
+            0x04,
+            0x00,
+            0x00,
+            0x00,
+            0x04,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ]
+    )
+
+    def __init__(self, spi, cs, dc, rst, bl, 旋转, color_bit, w, h, 逆CS):
         self._spi = spi
         self._cs = Pin(cs, Pin.OUT)
         self._dc = Pin(dc, Pin.OUT)
@@ -87,16 +634,16 @@ class LCD:
             self._rst = Pin(rst, Pin.OUT)
         else:
             self._rst = None
-            
+
         # 背光
         if bl is not None:
             self._bl = Pin(bl, Pin.OUT, value=1)
         else:
             self._bl = None
-            
+
         # 像素bit
         self.__color_bit = color_bit
-        
+
         # 通过选择角度设置w和h
         self._旋转 = 旋转
         if 旋转 == 1 or 旋转 == 3:
@@ -104,7 +651,7 @@ class LCD:
             self._height = h
         else:
             self._width = h
-            self._height = w 
+            self._height = w
 
         # 不同色彩需要数据不同
         if self.__color_bit == 16:
@@ -121,12 +668,10 @@ class LCD:
 
         # 如果SPI只驱动了两个设备，可以省略CS
         self._cs_on = 0
-        self._cs_off = 1 
+        self._cs_off = 1
         if 逆CS:
             self._cs_on = 1
             self._cs_off = 0
-            
-
 
     def _init(self):
         raise ValueError("init未实现！")
@@ -191,7 +736,7 @@ class LCD:
         self._cs.value(self._cs_on)
         self._spi.write(bytearray([cmd]))
         self._cs.value(self._cs_off)
- 
+
     def _write_data(self, data):
         self._dc.value(1)
         self._cs.value(self._cs_on)
@@ -248,14 +793,6 @@ class LCD:
         self._spi.write(b"\x2c")
         self._cs.value(self._cs_off)
 
-
-    # data和线条是列表
-    def append(data, 线条色, 背景色):
-        pass
-
-
-
-        
     def _color565(self, r, g=0, b=0):
         if isinstance(r, (tuple, list)):
             r, g, b = r[:3]
@@ -273,16 +810,14 @@ class LCD:
         return bytes([r, g, b])
 
     # 方框测试
-    def test(self):
+    def _test(self):
         buf = bytearray()
         for i in range(self._width):
             if i == 0 or i == self._width - 1:
                 buf.extend(self.color.白 * self._height)
                 continue
             buf.extend(
-                self.color.白
-                + self.color.紫 * (self._height - 2)
-                + self.color.白
+                self.color.白 + self.color.紫 * (self._height - 2) + self.color.白
             )
 
         # 显示
@@ -290,16 +825,16 @@ class LCD:
         self._write_data_bytes(buf)
 
     # 更新速度测试
-    def test_spi(self):
+    def _test_spi(self):
         ret = []
-        
+
         # 测试SPI速率
         t1 = self.color.紫 * self._width * self._height
         t2 = self.color.粉 * self._width * self._height
         t3 = memoryview(t1)
         t4 = memoryview(t2)
 
-        self._set_window(0,0,self._width-1,self._height-1)
+        self._set_window(0, 0, self._width - 1, self._height - 1)
         self._cs.value(self._cs_on)
         self._dc.value(1)
         for _ in range(20):
@@ -307,7 +842,7 @@ class LCD:
             self._write_data_bytes(t3)
             tt = time.ticks_ms() - s
             ret.append(tt)
-            
+
             s = time.ticks_ms()
             self._write_data_bytes(t4)
             tt = time.ticks_ms() - s
@@ -322,47 +857,70 @@ class LCD:
         # 一次性铺满
         self._write_data_bytes(color * (self._width * self._height))
 
-    # 字符超出宽度有小bug
-    # @timeit
-    # 别忘了，列刷新可以加快速度，下次重写一下
-    def txt(self, 字符串, x, y, size, 字体色, 背景色, 缓存):
-        if y + size > self._height:
-            return
 
-        for 字 in 字符串:
-            # 字符不存在
+    def txt(self, 字符串, x, y, size, 字体色, 背景色, 缓存):
+        # s = time.ticks_us()
+        
+        # 终点字符，终点坐标
+        str_len = 0         # 终点字符
+        w = x-1             # 终点坐标
+        h = y + size -1     # 终点坐标
+        
+        # 非法高度
+        if h >= self._height: 
+            return
+        
+        # 计算终点字符，终点坐标
+        for i, 字 in enumerate(字符串):
+            # 字符不存在用空格
             if 字 not in LCD._char.get(size, {}):
                 字 = " "
 
-            key = (字, size, 字体色, 背景色)  # 缓存key
-            LCD._char_buf[:] = b""  # 清理buf
-            if ord(字) < 128:  # 小写半半宽
-                w = size // 2
-            else:
-                w = size
+            # ascii 半宽
+            t_w = size
+            if ord(字) < 128:
+                t_w = size // 2
 
-            if x + w > self._width:
-                return
+            # 超出显示范围，截断字符串
+            if w + t_w >= self._width:
+                break
+            str_len+=1                    
+            w +=t_w
 
-            self._set_window(x, y, x + w - 1, y + size - 1)
-            x += w  # 下一次横轴偏移
+        
+        # 设置显示范围
+        self._set_window(x, y, w, h)
 
-            # 有缓存
+        # 显示字符
+        for i in range(str_len):
+            key = (字符串[i], size, 字体色, 背景色)  # 缓存key
+
+            # 有缓存,直接显示
             if key in LCD._char_缓存:
                 self._write_data_bytes(LCD._char_缓存[key])
                 continue
 
-            # 无缓存
-            for byte in LCD._char[size][字]:
+            # 无缓存，需要创建像素数据
+            LCD._char_buf[:] = b""  # 清理buf
+            for byte in LCD._char[size][字符串[i]]:
                 for bit in range(8):
                     if byte & (1 << (7 - bit)):
                         LCD._char_buf.extend(字体色)
                     else:
                         LCD._char_buf.extend(背景色)
+                        
+            #是否加入缓存
             if 缓存:
                 LCD._char_缓存[key] = bytes(LCD._char_buf[0 : w * size * len(字体色)])
+            
+            # 无缓存显示
             self._write_data_bytes(LCD._char_缓存[key])
 
+        # udp.send(time.ticks_us()-s)  
+    
+    
+    
+    
     # ------- 字体 -------
     class def_字符:
         ascii = """ 1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ~·！@#￥%……&*（）——++-=、|【{}】；：‘“，《。》/？*~!@#$%^&*()-_=+[{}]\|;:'",<.>/?/*"""
@@ -546,48 +1104,46 @@ class LCD:
         )
 
 
-
 class 预设色16位:
     # ---- 基础灰阶 ----
-    白   = b'\xff\xff'  # (255,255,255)
-    黑   = b'\x00\x00'  # (0,0,0)
-    浅灰 = b'\xc6\x18'  # (192,192,192)
-    中灰 = b'\x84\x10'  # (128,128,128)
-    深灰 = b'\x42\x08'  # (64,64,64)
+    白   = b"\xff\xff"  # FFFF
+    黑   = b"\x00\x00"  # 0000
+    浅灰 = b"\xc6\x18"  # C618
+    中灰 = b"\x84\x10"  # 8410
+    深灰 = b"\x42\x08"  # 4208
 
     # ---- 功能语义 ----
-    蓝   = b'\x53\x1d'  # (32,120,232)
-    绿   = b'\x25\x91'  # (48,168,88)
-    黄   = b'\xe3\xac'  # (248,200,64)
-    红   = b'\xc8\xb1'  # (232,56,64)
-    青   = b'\x04\x9f'  # (0,168,200)
+    蓝   = b"\x23\xdd"  # 237D?（实际：23DD）
+    绿   = b"\x35\x4b"  # 354B
+    黄   = b"\xfe\x48"  # FE48
+    红   = b"\xe9\xc8"  # E9C8
+    青   = b"\x05\x59"  # 0559
 
     # ---- 高亮 / 强调 ----
-    橙   = b'\x87\xec'  # (248,144,48)
-    紫   = b'\x92\x99'  # (152,88,208)
-    粉   = b'\xf9\xd1'  # (248,176,192)
+    橙   = b"\xfc\x86"  # ← 正确橙色 FC86  (RGB 248,144,48)
+    紫   = b"\x9a\xda"  # 9ADA
+    粉   = b"\xfd\x98"  # FD98
 
 
 class 预设色24位:
     # ---- 基础灰阶 ----
-    白   = b'\xff\xff\xff'  # (255,255,255)
-    黑   = b'\x00\x00\x00'  # (0,0,0)
-    浅灰 = b'\xc0\xc0\xc0'  # (192,192,192)
-    中灰 = b'\x80\x80\x80'  # (128,128,128)
-    深灰 = b'\x40\x40\x40'  # (64,64,64)
+    白 = b"\xff\xff\xff"  # (255,255,255)
+    黑 = b"\x00\x00\x00"  # (0,0,0)
+    浅灰 = b"\xc0\xc0\xc0"  # (192,192,192)
+    中灰 = b"\x80\x80\x80"  # (128,128,128)
+    深灰 = b"\x40\x40\x40"  # (64,64,64)
 
     # ---- 功能语义 ----
-    蓝   = b'\x20\x78\xe8'  # (32,120,232)
-    绿   = b'\x30\xa8\x58'  # (48,168,88)
-    黄   = b'\xf8\xc8\x40'  # (248,200,64)
-    红   = b'\xe8\x38\x40'  # (232,56,64)
-    青   = b'\x00\xa8\xc8'  # (0,168,200)
+    蓝 = b"\x20\x78\xe8"  # (32,120,232)
+    绿 = b"\x30\xa8\x58"  # (48,168,88)
+    黄 = b"\xf8\xc8\x40"  # (248,200,64)
+    红 = b"\xe8\x38\x40"  # (232,56,64)
+    青 = b"\x00\xa8\xc8"  # (0,168,200)
 
     # ---- 高亮 / 强调 ----
-    橙   = b'\xf8\x90\x30'  # (248,144,48)
-    紫   = b'\x98\x58\xd0'  # (152,88,208)
-    粉   = b'\xf8\xb0\xc0'  # (248,176,192)
-
+    橙 = b"\xf8\x90\x30"  # (248,144,48)
+    紫 = b"\x98\x58\xd0"  # (152,88,208)
+    粉 = b"\xf8\xb0\xc0"  # (248,176,192)
 
 
 class 波形:

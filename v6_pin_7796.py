@@ -23,11 +23,10 @@ st = st7796.ST7796(
     bl=11,
     旋转=3,
     color_bit=24,
-)
+)._init().load_bmf("/no_delete/270度左旋转几个字符.bmf")
 
 
-          
-            
+                      
 # 字体测试
 t = 16
 tt = 0
@@ -47,6 +46,7 @@ for size in range(8):
       
 time.sleep(3) 
  
+ 
 # 波形测试
 st.fill(st.color.基础灰阶.黑)
 bx = st.new_波形(
@@ -60,6 +60,7 @@ bx = st.new_波形(
     波形色=[st.color.亮彩.海蓝, st.color.亮彩.橙, st.color.亮彩.红],
     背景色=st.color.基础灰阶.白,
 )
+ 
  
 bx1 = st.new_波形(
     w起点=20,
