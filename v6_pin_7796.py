@@ -45,7 +45,7 @@ for size in range(8):
     tt += t
       
 time.sleep(3) 
- 
+  
  
 # 波形测试
 st.fill(st.color.基础灰阶.黑)
