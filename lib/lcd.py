@@ -10,8 +10,8 @@ class LCD:
     _window缓存 = bytearray(4)
 
     # 加速点阵数据转像素数据
-    _char_buf = bytearray(72 * 72 * 3)
-
+    # _char_buf_t = bytearray(72 * 72 * 3)
+    # _char_buf = memoryview(_char_buf_t)
     # 像素数据
     # char_缓存[(背景色,字体色,字,字号)] = bytes
     _char_缓存 = {}
@@ -623,10 +623,95 @@ class LCD:
             0x00,
         ]
     )
+    _char[32][" "] = bytes(
+        [
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ]
+    )
 
-    def __init__(self, spi, cs, dc, rst, bl, 旋转, color_bit, w, h, 逆CS):
+    def __init__(
+        self,
+        spi,
+        cs,
+        dc,
+        rst,
+        bl,
+        旋转,
+        color_bit,
+        w,
+        h,
+        逆CS,
+    ):
         self._spi = spi
-        self._cs = Pin(cs, Pin.OUT)
+
+        if cs is None:
+            self._cs = None
+        else:
+            self._cs = Pin(cs, Pin.OUT)
+
         self._dc = Pin(dc, Pin.OUT)
 
         # 复位
@@ -710,7 +795,7 @@ class LCD:
             # BMP 按行从下到上，需要翻转
             self._set_window(x, y, x + width - 1, y + height - 1)
             self._dc.value(1)
-            self._cs.value(self._cs_on)
+            self._cs_open()
 
             line_bytes = ((width * 3 + 3) // 4) * 4  # 每行 4 字节对齐
             buf = bytearray(width * 3)
@@ -728,26 +813,36 @@ class LCD:
                         color = self._color888(r, g, b)
                     self._spi.write(color)
 
-            self._cs.value(self._cs_off)
+            self._cs_close()
 
     # ------- 基本IO -------
+    def _cs_open(self):
+        if self._cs is None:
+            return
+        self._cs(self._cs_on)
+
+    def _cs_close(self):
+        if self._cs is None:
+            return
+        self._cs(self._cs_off)
+
     def _write_cmd(self, cmd):
         self._dc.value(0)
-        self._cs.value(self._cs_on)
+        self._cs_open()
         self._spi.write(bytearray([cmd]))
-        self._cs.value(self._cs_off)
+        self._cs_close()
 
     def _write_data(self, data):
         self._dc.value(1)
-        self._cs.value(self._cs_on)
+        self._cs_open()
         self._spi.write(bytearray([data]))
-        self._cs.value(self._cs_off)
+        self._cs_close()
 
     def _write_data_bytes(self, buf):
         self._dc.value(1)
-        self._cs.value(self._cs_on)
+        self._cs_open()
         self._spi.write(buf)
-        self._cs.value(self._cs_off)
+        self._cs_close()
 
     # 行刷新下，最严重的瓶颈，刷新一次屏幕动辄需要调用上千次
     # 此瓶颈可以转移到处理数据，不过mpy+PSRAM+数据处理，瓶颈更严重
@@ -760,7 +855,7 @@ class LCD:
         y0 = self._height - 1 - y1
         y1 = self._height - 1 - t
 
-        self._cs.value(self._cs_on)
+        self._cs_open()
 
         # CASET (0x2A)
         self._dc.value(0)
@@ -791,7 +886,7 @@ class LCD:
         self._dc.value(0)
         # time.sleep(0.03 )
         self._spi.write(b"\x2c")
-        self._cs.value(self._cs_off)
+        self._cs_close()
 
     def _color565(self, r, g=0, b=0):
         if isinstance(r, (tuple, list)):
@@ -835,20 +930,20 @@ class LCD:
         t4 = memoryview(t2)
 
         self._set_window(0, 0, self._width - 1, self._height - 1)
-        self._cs.value(self._cs_on)
+        self._cs_open()
         self._dc.value(1)
         for _ in range(20):
             s = time.ticks_ms()
-            self._write_data_bytes(t3)
+            self._spi.write(t3)
             tt = time.ticks_ms() - s
             ret.append(tt)
 
             s = time.ticks_ms()
-            self._write_data_bytes(t4)
+            self._spi.write(t4)
             tt = time.ticks_ms() - s
             ret.append(tt)
 
-        self._cs.value(self._cs_off)
+        self._cs_close()
         return ret
 
     # 清屏
@@ -858,10 +953,9 @@ class LCD:
         self._write_data_bytes(color * (self._width * self._height))
 
     def txt(self, 字符串, x, y, size, 字体色, 背景色, 缓存):
-        # s = time.ticks_us()
-
+        s = time.ticks_ms()
         # 终点字符，终点坐标
-        str_len = 0  # 终点字符
+        new_str = []  # 处理非法数据后的字符串
         w = x - 1  # 终点坐标
         h = y + size - 1  # 终点坐标
 
@@ -870,7 +964,7 @@ class LCD:
             return
 
         # 计算终点字符，终点坐标
-        for i, 字 in enumerate(字符串):
+        for  字 in 字符串:
             # 字符不存在用空格
             if 字 not in LCD._char.get(size, {}):
                 字 = " "
@@ -883,39 +977,74 @@ class LCD:
             # 超出显示范围，截断字符串
             if w + t_w >= self._width:
                 break
-            str_len += 1
             w += t_w
+         
+            new_str.append(字)
+        
 
-        # 设置显示范围
+        # 设置显示范围 
         self._set_window(x, y, w, h)
-
+        # return
+        
         # 显示字符
-        for i in range(str_len):
-            key = (字符串[i], size, 字体色, 背景色)  # 缓存key
+        for 字 in new_str:
+            key = (字, size, 字体色, 背景色)  # 缓存key
 
             # 有缓存,直接显示
             if key in LCD._char_缓存:
                 self._write_data_bytes(LCD._char_缓存[key])
                 continue
 
-            # 无缓存，需要创建像素数据
-            LCD._char_buf[:] = b""  # 清理buf
-            for byte in LCD._char[size][字符串[i]]:
+            # 像素数据
+            zxc = bytearray()
+
+            # 点阵字节转像素
+            # 此处实现是单边批量添加
+            # 实测双边批量添加效率稍低
+            # mem操作效率最低
+            t = 0
+            for byte in LCD._char[size][字]:
                 for bit in range(8):
                     if byte & (1 << (7 - bit)):
-                        LCD._char_buf.extend(字体色)
+                        zxc.extend(背景色 * t + 字体色)
+                        t = 0
+                        # zxc.extend(字体色)
                     else:
-                        LCD._char_buf.extend(背景色)
+                        t += 1
+                        # zxc.extend(背景色)
+            if t:
+                zxc.extend(背景色 * t)
 
-            # 是否加入缓存
+            # 点阵字节转像素，此法也不错甚至稍快
+            # 数据存入列表，只调用一次 extend
+            # 数据块 = []  # 暂存所有小片段的引用
+            # t = 0
+
+            # for byte in LCD._char[size][字符串[i]]:
+            #     for bit in range(8):
+            #         if byte & (1 << (7 - bit)):
+            #             if t:
+            #                 数据块.append(背景色 * t)
+            #                 t = 0
+            #             数据块.append(字体色)
+            #         else:
+            #             t += 1
+
+            # if t:
+            #     数据块.append(背景色 * t)
+            # # udp.send(len(数据块))
+            # zxc.extend(b"".join(数据块))
+ 
+            # 显示和加入缓存
+            # zxc = memoryview(zxc)  zxc
+            # 是否加入缓存 
             if 缓存:
-                LCD._char_缓存[key] = bytes(LCD._char_buf[0 : w * size * len(字体色)])
+                LCD._char_缓存[key] = zxc
+            # 无缓存显示  
+            self._write_data_bytes(zxc)
 
-            # 无缓存显示
-            self._write_data_bytes(LCD._char_缓存[key])
-
-        # udp.send(time.ticks_us()-s)
-
+        udp.send(time.ticks_ms() - s) 
+ 
     # ------- 字体 -------
     class def_字符:
         ascii = """ 1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ~·！@#￥%……&*（）——++-=、|【{}】；：‘“，《。》/？*~!@#$%^&*()-_=+[{}]\|;:'",<.>/?/*"""
@@ -931,7 +1060,7 @@ class LCD:
             buf = f.read(12)
 
             if buf[0:4] != b"BMF3":
-                raise "格式有误"
+                raise ValueError("格式有误")
             # buf[4:6] # 版本 没用
             字号数量 = buf[6] | (buf[7] << 8)  # 存储了多少种字号
             数据区起始 = buf[8] | (buf[9] << 8) | (buf[10] << 16) | (buf[11] << 24)
@@ -1090,8 +1219,8 @@ class LCD:
         size_h: int,
         多少格: int,
         波形像素: list,
-        min: list,
-        max: list,
+        data_min: list,
+        data_max: list,
         波形色: list,
         背景色: bytes,
     ):
@@ -1103,8 +1232,8 @@ class LCD:
             size_h,
             多少格,
             波形像素,
-            min,
-            max,
+            data_min,
+            data_max,
             波形色,
             背景色,
         )
@@ -1122,8 +1251,8 @@ class 波形:
         size_h: int,
         多少格: int,
         波形像素: list,
-        min: list,
-        max: list,
+        data_min: list,
+        data_max: list,
         波形色: list,
         背景色: bytes,
     ):
@@ -1148,11 +1277,11 @@ class 波形:
         self._mv = memoryview(self._buf)
         self._当前下标 = 0  # 最旧字节位置
         self._多少格 = 多少格
-        self._min = min
-        self._max = max
+        self._min = data_min
+        self._max = data_max
         self._允许的最大下标 = []
         for t in 波形像素:
-            self._允许的最大下标.append( self._size_h - t)
+            self._允许的最大下标.append(self._size_h - t)
 
     def 更新(self):
         self._st._set_window(self._w起点, self._h起点, self._w终点, self._h终点)
@@ -1174,13 +1303,17 @@ class 波形:
         #     td[i*60:i*60+3] = self._st.color.基础灰阶.黑
 
         # 遍历多个输入通道
-        for i in range(len(data)):
+        for 通道_i in range(len(data)):
             # 数据映射到下标
-            index = (data[i]-self._min[i]) / (self._max[i] - self._min[i]) * self._允许的最大下标[i]
-            
+            index = (
+                (data[通道_i] - self._min[通道_i])
+                / (self._max[通道_i] - self._min[通道_i])
+                * self._允许的最大下标[通道_i]
+            )
+
             # # 限幅，防止传入数据超过幅值
-            if index > self._允许的最大下标[i]:
-                index = self._允许的最大下标[i]
+            if index > self._允许的最大下标[通道_i]:
+                index = self._允许的最大下标[通道_i]
             if index < 0:
                 index = 0
 
@@ -1188,7 +1321,7 @@ class 波形:
             index = int(index) * self._size_byte
 
             # 数据更新到背景色中
-            td[index : index + self._波形len[i]] = self._波形色[i]
+            td[index : index + self._波形len[通道_i]] = self._波形色[通道_i]
 
         # # 查看有无，不合理数据
         # if len(td) > self._size_h * self._size_byte:
@@ -1198,7 +1331,6 @@ class 波形:
         self._append(td)
 
     # 单次追加数据越多越慢
-    # 波形显示一般宽大于高,直接用这个
     def _append(self, data: bytes) -> None:
         if self._当前下标 == self._size:
             self._当前下标 = 0
@@ -1209,7 +1341,11 @@ class 波形:
         self._当前下标 = self._当前下标 + len(data)
         # udp.send(self.当前下标 )
 
-    # bytearray中 末尾数据越多越慢
+    # 非常快,不过未知原因当byteaary末尾数据越多越慢
+    # 环形内存一次性申请460K+内存,分320还是480次添加忘了
+    # 索引起步时添加数据20ms,索引末尾时添加数据0ms，线性降低
+    # 上面方法稳定6~7ms，稳定的慢
+    # 正常使用应该下面这个快
     # 万一性能不够，整合两个函数为一个
     def _append_mv(self, data: bytes) -> None:
         if self._当前下标 == self._size:
