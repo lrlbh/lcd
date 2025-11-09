@@ -1,5 +1,5 @@
 import time
-from machine import Pin
+from machine import Pin,SPI
 import struct
 
 from lib import udp
@@ -694,7 +694,7 @@ class LCD:
 
     def __init__(
         self,
-        spi,
+        spi:SPI,
         cs,
         dc,
         rst,
@@ -706,7 +706,7 @@ class LCD:
         逆CS,
     ):
         self._spi = spi
-
+        
         if cs is None:
             self._cs = None
         else:
@@ -887,6 +887,9 @@ class LCD:
         # time.sleep(0.03 )
         self._spi.write(b"\x2c")
         self._cs_close()
+        
+        
+
 
     def _color565(self, r, g=0, b=0):
         if isinstance(r, (tuple, list)):
