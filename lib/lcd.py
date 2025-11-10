@@ -729,7 +729,7 @@ class LCD:
         # 像素bit
         self.__color_bit = color_bit
 
-        # 通过选择角度设置w和h
+        # 通过选择角度设置w和h,列刷新逆逻辑
         self._旋转 = 旋转
         if 旋转 == 1 or 旋转 == 3:
             self._width = w
@@ -738,6 +738,7 @@ class LCD:
             self._width = h
             self._height = w
 
+            
         # 不同色彩需要数据不同
         if self.__color_bit == 16:
             self.color_fn = self._color565

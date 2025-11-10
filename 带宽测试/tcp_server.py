@@ -2,7 +2,7 @@ import socket, time
 
 HOST = "0.0.0.0"
 PORT = 8848
-FRAME_SIZE = 320*240*2
+FRAME_SIZE = 320*240*100
 buf = b'\x55' * FRAME_SIZE
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

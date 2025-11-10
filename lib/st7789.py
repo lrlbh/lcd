@@ -3,21 +3,44 @@ from machine import Pin
 import lcd
 import asyncio
 
+
 class ST7789(lcd.LCD):
-    def __init__(self, spi, cs, dc, rst, bl,
-                 旋转=3, color_bit=16, w=240, h=320, 逆CS=False):
+    def __init__(
+        self,
+        spi,
+        cs,
+        dc,
+        rst,
+        bl,
+        旋转=3,
+        color_bit=16,
+        w=240,
+        h=320,
+        逆CS=False,
+    ):
         # 初始化基类
-        super().__init__(spi, cs, dc, rst, bl, 旋转, color_bit, w, h, 逆CS)
+        super().__init__(
+            spi,
+            cs,
+            dc,
+            rst,
+            bl,
+            旋转,
+            color_bit,
+            w,
+            h,
+            逆CS,
+        )
 
     def _init(self):
         """
         ST7789 初始化流程（完全按官方推荐顺序）
         """
-        
+
         # === 软件复位 ===
         # 命令 0x01：Software Reset
         # 将所有寄存器恢复为默认值（效果与硬件复位相同）
-        if self._rst is None:          
+        if self._rst is None:
             self._write_cmd(0x01)
         else:
             self._rst.value(0)
@@ -31,7 +54,7 @@ class ST7789(lcd.LCD):
         # 让内部偏压电路和时钟启动。
         self._write_cmd(0x11)
         time.sleep_ms(120)
-        
+
         # === Porch 设置 ===
         # 命令 0xB2：设置前后消隐时序
         # self._write_cmd(0xB2)
@@ -39,14 +62,14 @@ class ST7789(lcd.LCD):
         # self._write_cmd(0xB2)
         # # 前后消隐都加大，比如从 0x0C → 0x14 或更大
         # self._write_data_bytes(b'\x14\x14\x00\x33\x33')
- 
+
         # 1) 先关 TE
         # self._write_cmd(0x34)                   # TEOFF
 
         # # 2) 清/设置 TE 扫描线（可设为 0 行）
         # self._write_cmd(0x44)                   # SET_TEAR_SCANLINE
         # self._write_data_bytes(b'\x00\x00')     # line = 0（帧顶）
-        
+
         # self._write_cmd(0x35)  # TEON，启用 TE 输出
         # self._write_data(0x00)
 
@@ -132,7 +155,7 @@ class ST7789(lcd.LCD):
 
         # === Porch 设置 ===
         self._write_cmd(0xB2)
-        self._write_data_bytes(b'\x0C\x0C\x00\x33\x33')
+        self._write_data_bytes(b"\x0c\x0c\x00\x33\x33")
 
         # === Gate 控制 ===
         self._write_cmd(0xB7)

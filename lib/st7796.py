@@ -1,6 +1,7 @@
 import time
 import asyncio
 from machine import Pin
+
 # import gc
 import struct
 import lcd
@@ -17,17 +18,37 @@ import lcd
 
 
 class ST7796(lcd.LCD):
-    def __init__(self, spi, cs, dc, rst, bl,  旋转=3, 
-                 color_bit=24,w=320, h=480,逆CS=False):
-        super().__init__(spi, cs, dc, rst, bl,  旋转,
-                         color_bit,w, h,逆CS)
+    def __init__(
+        self,
+        spi,
+        cs,
+        dc,
+        rst,
+        bl,
+        旋转=3,
+        color_bit=24,
+        w=320,
+        h=480,
+        逆CS=False,
+    ):
+        super().__init__(
+            spi,
+            cs,
+            dc,
+            rst,
+            bl,
+            旋转,
+            color_bit,
+            w,
+            h,
+            逆CS,
+        )
 
     def _init(self):
-        
         # === 软件复位 ===
         # 命令 0x01：Software Reset
         # 将所有寄存器恢复为默认值（效果与硬件复位相同）
-        if self._rst is None:          
+        if self._rst is None:
             self._write_cmd(0x01)
         else:
             self._rst.value(0)
@@ -35,7 +56,6 @@ class ST7796(lcd.LCD):
             self._rst.value(1)
 
         time.sleep_ms(120)  # 等待 120ms 以上
-
 
         # Sleep Out
         self._write_cmd(0x11)
@@ -64,7 +84,8 @@ class ST7796(lcd.LCD):
         self._write_cmd(0x3A)
         time.sleep_ms(40)
         self._write_data(
-            0x55 if self.__color_bit == 16
+            0x55
+            if self.__color_bit == 16
             else (0x66 if self.__color_bit == 18 else 0x77)
         )
 
@@ -159,4 +180,3 @@ class ST7796(lcd.LCD):
         await asyncio.sleep_ms(60)
         self.fill(self.color.黑)
         return self
-

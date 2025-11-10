@@ -2,7 +2,7 @@ import network, socket, time
 
 SSID = "CMCC-Ef6Z"
 PASSWORD = "ddtzpts9"
-HOST = "192.168.1.11"
+HOST = "192.168.1.9"
 PORT = 8848
 
 # Wi-Fi 连接
@@ -20,7 +20,8 @@ print("TCP 已连接")
 
 
 # 测速
-bsize =  1024 * 32 # 153600
+bsize =   480*320*4
+#bsize =   1024 * 32 
 buf = bytearray(bsize)  # 预分配一个缓冲区
 buf = memoryview(buf)
 total = 0
@@ -42,5 +43,7 @@ print(f"{每秒数据/1024/1024}MiB/s ")
 
 
 s.close()
+
+
 
 
