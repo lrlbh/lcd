@@ -1,6 +1,7 @@
 import socket
 from machine import SPI, Pin
-from lib import st7789, udp, st7796
+import test
+from lib import st7789, udp, st7796,st7735,test,gc9a01
 import struct
 import time
 
@@ -9,53 +10,30 @@ HOST = "192.168.1.9"
 PORT = 8848
 
 
-
-# 热压机V6,初始化
+ 
+# 老板子引脚
 spi = SPI(
     1,
     baudrate=100_000_000,
     polarity=0,
     phase=0,
-    sck=38,
-    mosi=17,
-    miso=None,
+    sck=12,
+    mosi=13,
+    miso=None,# 10
 )
-udp.send(spi)
-st = st7796.ST7796(
-    spi,
-    cs=16,
-    dc=48,
-    rst=18,
-    bl=11,
-    旋转=0,
-    color_bit=bit,
-    w=320,
-    h=480
-)._init()#.load_bmf("/no_delete/270度左旋转几个字符.bmf")
-
-
-# # 双7789板子引脚 
-# spi = SPI(
-#     1,
-#     baudrate=100_000_000,
-#     polarity=0,
-#     phase=0,
-#     sck=38,
-#     mosi=39,
-#     miso=None,
-# )
-# st = st7789.ST7789(
-#     spi, 
-#     cs=48,
-#     dc=47,
-#     rst=18,
-#     bl=9,
-#     旋转=2,
-#     color_bit=bit,
-#     # w=w,  # 此乃屏幕原始比例参数
-#     # h=h, 
-# )._init()
-
+st = gc9a01.GC9A01(
+    spi, 
+    cs=47,
+    dc=21, 
+    rst=14, # 14
+    bl=48,
+    旋转=1,
+    color_bit=bit, 
+    逆CS= False,
+    w=240,  # 此乃屏幕原始比例参数
+    h=240, 
+    
+)._init()
 
 h = st._height
 w = st._width
@@ -64,14 +42,14 @@ if bit == 16:
     byte = 2
 
 buf = bytearray(w * h * byte)
-mv = memoryview(buf)
+mv = memoryview(buf) 
 
 # st._set_window(0, 0, w - 1, h - 1)
 # st._dc.value(1)
 st._cs_open()
 w_buf = bytearray(4)
-
-
+协议 = bytearray(16)
+协议mv = memoryview(协议)
 while True:
     try:
         # ====== 连接 TCP ======
@@ -83,14 +61,24 @@ while True:
         udp.send("已协商格式")
 
 
+        while True:
+            # 废弃了整个屏幕更新，需要加入协议引入包，以及设置坐标
+            s.readinto(协议mv)
+            x, y, wl, hl = struct.unpack(">4I", 协议mv)
+            size = wl * hl * byte
+            
+            # 读取像素数据
+            s.readinto(mv, size)
+            
+            st._set_window(x, y, x + wl-1, y + hl-1)
+            st._write_data_bytes(mv[:size])
 
+        
         while True:
             
             # 废弃了整个屏幕更新，需要加入协议引入包，以及设置坐标
-            协议 = s.recv(16)
-            if not 协议:
-                continue
-            x, y, wl, hl = struct.unpack(">4I", 协议)
+            s.readinto(协议mv)
+            x, y, wl, hl = struct.unpack(">4I", 协议mv)
             size = wl * hl * byte
             
             # 读取像素数据

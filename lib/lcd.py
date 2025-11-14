@@ -1,11 +1,66 @@
+import gc
 import time
-from machine import Pin,SPI
+from machine import Pin, SPI
 import struct
 
 from lib import udp
 
 
 class LCD:
+    class Size:
+        # W -- H
+
+        st7735 = (132, 162)
+
+        # 推测是ili9163,排线上也没有引出读取脚
+        # 不过有大量讨论证明，应该不是校准问题
+        st7735假货_144 = (132, 132)
+        # 推测也是ili9163,不过没查资料了，前面查1.44寸时
+        # 有说明ili9163,出厂可以配置为多个分辨率，其中有128*160
+        st7735假货_18 = (128, 160)
+
+        st7789 = (240, 320)
+        st7796 = (320, 480)
+        
+        
+        ili9488 = (320, 480)
+        
+        
+        gc9a01 = (240, 240)
+        gc9107 = (128, 160)
+
+    # 顺序上下左右
+    # 上上下下左右左右ba...
+    class 像素缺失:
+        # 0.96寸 80 *160
+        st7735_0_96 = (1, 1, 26, 26)
+
+        # 1.44寸 128 * 128
+        st7735假货_1_44 = (1, 3, 2, 2)
+
+        # 1.8寸 128* 160
+        st7735_1_8 = (1, 1, 2, 2)
+        
+        # 0.85寸 128* 128
+        gc9107_0_85 = (32, 0, 0, 0)
+
+        # 1.14寸 135 * 240
+        st7789_1_14 = (40, 40, 52, 53)
+
+        # 1.3寸240*240
+        st7789_1_3 = (0, 80, 0, 0)
+
+        # 1.54寸240*240
+        st7789_1_54 = (0, 80, 0, 0)
+
+        # 1.69寸 240 * 280
+        st7789_1_69 = (20, 20, 0, 0)
+
+        # 1.9寸 170 * 320
+        st7789_1_9 = (0, 0, 35, 35)
+
+
+
     # 加速set_window
     _window缓存 = bytearray(4)
 
@@ -694,19 +749,19 @@ class LCD:
 
     def __init__(
         self,
-        spi:SPI,
-        cs,
+        spi: SPI,
         dc,
-        rst,
-        bl,
-        旋转,
-        color_bit,
-        w,
-        h,
-        逆CS,
+        size=Size.st7789,
+        bl=None,
+        rst=None,
+        cs=None,
+        旋转=3,
+        color_bit=16,  # 7735 使用 18bit OR 16bit,实际应该是支持16bit
+        像素缺失=(0, 0, 0, 0),
+        逆CS=False,
     ):
         self._spi = spi
-        
+
         if cs is None:
             self._cs = None
         else:
@@ -728,17 +783,43 @@ class LCD:
 
         # 像素bit
         self.__color_bit = color_bit
+        self._byte = 3
+        if self.__color_bit == 16:
+            self._byte = 2
 
-        # 通过选择角度设置w和h,列刷新逆逻辑
+        self._size = size
+        self._像素缺失_顶 = 像素缺失[0]
+        self._像素缺失_底 = 像素缺失[1]
+        self._像素缺失_左 = 像素缺失[2]
+        self._像素缺失_右 = 像素缺失[3]
+
+        # 通过选择角度设置w和h,逻辑列刷新
+        # 像素补偿 = (1, 33, 2, 2)
         self._旋转 = 旋转
         if 旋转 == 1 or 旋转 == 3:
-            self._width = w
-            self._height = h
+            self._width_驱动 = size[0]
+            self._height_驱动 = size[1]
+            self._width = size[0] - (self._像素缺失_右 + self._像素缺失_左)
+            self._height = size[1] - (self._像素缺失_底 + self._像素缺失_顶)
         else:
-            self._width = h
-            self._height = w
+            self._width_驱动 = size[1]
+            self._height_驱动 = size[0]
+            self._width = size[1] - (self._像素缺失_底 + self._像素缺失_顶)
+            self._height = size[0] - (self._像素缺失_右 + self._像素缺失_左)
 
-            
+        if 旋转 == 0:
+            self._列偏移 = self._像素缺失_顶
+            self._行偏移 = self._像素缺失_右
+        elif 旋转 == 1:
+            self._列偏移 = self._像素缺失_右
+            self._行偏移 = self._像素缺失_底
+        elif 旋转 == 2:
+            self._列偏移 = self._像素缺失_底
+            self._行偏移 = self._像素缺失_左
+        else:
+            self._列偏移 = self._像素缺失_左
+            self._行偏移 = self._像素缺失_顶
+
         # 不同色彩需要数据不同
         if self.__color_bit == 16:
             self.color_fn = self._color565
@@ -759,8 +840,57 @@ class LCD:
             self._cs_on = 1
             self._cs_off = 0
 
-    def _init(self):
-        raise ValueError("init未实现！")
+    def _init(self, 反色=True, RGB=False):
+        # 复位
+        if self._rst is None:
+            self._write_cmd(0x01)
+        else:
+            self._rst.value(0)
+            time.sleep_ms(50)
+            self._rst.value(1)
+        time.sleep_ms(150)  # 等待 120ms 以上
+
+        # 退出睡眠
+        self._write_cmd(0x11)
+        time.sleep_ms(120)
+
+        # 扫描方向，扫描格式
+        # 4方向扫描
+        # RGB/BGR 顺序
+        val = [0x00, 0x60, 0xC0, 0xA0][self._旋转]
+        if not RGB:
+            val |= 0x08
+        self._write_cmd(0x36)
+        self._write_data(val)
+
+        # 像素格式  888 666 565
+        self._write_cmd(0x3A)
+        # self._write_data(0x33)
+        if self.__color_bit == 16:
+            self._write_data(0x55)
+        elif self.__color_bit == 18:
+            self._write_data(0x66)
+        elif self.__color_bit == 24:
+            self._write_data(0x77)
+            
+            
+
+        # === 反色显示（可选）===
+        # 命令 0x21：Inversion ON s
+        if 反色:
+            self._write_cmd(0x21)
+        else:
+            self._write_cmd(0x20)
+
+        # === 开显示 ===
+        # 命令 0x29：Display ON
+        self._write_cmd(0x29)
+        time.sleep_ms(60)
+
+        # === 清屏 ===
+        # 使用基础灰阶黑色填充整个屏幕
+        # self.fill(self.color.黑)
+        return self
 
     async def init_async(self):
         raise ValueError("init未实现！")
@@ -818,11 +948,13 @@ class LCD:
 
     # ------- 基本IO -------
     def _cs_open(self):
+        # time.sleep_ms(10)
         if self._cs is None:
             return
         self._cs(self._cs_on)
 
     def _cs_close(self):
+        # time.sleep_ms(10)
         if self._cs is None:
             return
         self._cs(self._cs_off)
@@ -851,77 +983,302 @@ class LCD:
     # 速度提升 1.5ms --> 0.4ms
     # 如果后续放弃多次频繁调用，这点提升屁用没有，改回来
     # 改成逻辑列刷新后这点速度完全没用了，不过改不改的也没意思
+    # 最近又修改了很多次了，肯定有很多冗余操作了，什么时候优化一下
     def _set_window(self, x0, y0, x1, y1):
+        # 部分屏幕阉割了一些分辨率，常见于st7735
+
+        x0 += self._列偏移
+        x1 += self._列偏移
+        y0 += self._行偏移
+        y1 += self._行偏移
+
+        期望w = x1 - x0 + 1
+        期望h = y1 - y0 + 1
+        期望像素 = 期望w * 期望h
+
+        # 逻辑列刷新核心逻辑
+        # if self._旋转==0  or self._旋转==3:
+        #     t = y0
+        #     y0 = self._height_驱动 - y1 - 1
+        #     y1 = self._height_驱动 - t - 1
+        # else:
+        #     t = y0
+        #     y0 = self._width_驱动 - y1 - 1
+        #     y1 = self._width_驱动 - t - 1
+
+        udp.send(f"旋转:{self._旋转}  高: {self._height_驱动}")
         t = y0
-        y0 = self._height - 1 - y1
-        y1 = self._height - 1 - t
+        y0 = self._height_驱动 - y1 - 1
+        y1 = self._height_驱动 - t - 1
+
+        # t = y0
+        # y0 = self._height - 1 - y1
+        # y1 = self._height - 1 - t
+
+        # # 逻辑列刷新核心逻辑
+        # t = x0
+        # x0 = self._width_驱动 - x1
+        # x1 = self._width_驱动 - t
+
+        # t0, t1 = x0,x1
+        # x0,x1 = y0,y1
+        # y0,y1 = t0,t1
+
+        udp.send(f"{x0, x1, y0, y1}")
+        # y0 = 0
+        # y1 = 239
 
         self._cs_open()
+        buf = LCD._window缓存
 
-        # CASET (0x2A)
+        # 列地址
         self._dc.value(0)
         self._spi.write(b"\x2a")
         self._dc.value(1)
-
-        buf = LCD._window缓存  # 预分配好的 4 字节缓存
         buf[0] = (y0 >> 8) & 0xFF
         buf[1] = y0 & 0xFF
         buf[2] = (y1 >> 8) & 0xFF
         buf[3] = y1 & 0xFF
-        # time.sleep(0.03 )
         self._spi.write(buf)
+        udp.send(f"列设置: {buf}")
 
-        # RASET (0x2B)
+        y0_val = int.from_bytes(buf[0:2], "big")
+        y1_val = int.from_bytes(buf[2:4], "big") + 1
+        实际h = y1_val - y0_val
+
+        # 行地址
         self._dc.value(0)
-        # time.sleep(0.03 )
         self._spi.write(b"\x2b")
         self._dc.value(1)
         buf[0] = (x0 >> 8) & 0xFF
         buf[1] = x0 & 0xFF
         buf[2] = (x1 >> 8) & 0xFF
         buf[3] = x1 & 0xFF
-        # time.sleep(0.03 )
         self._spi.write(buf)
+        udp.send(f"行设置: {buf}")
+
+        x0_val = int.from_bytes(buf[0:2], "big")
+        x1_val = int.from_bytes(buf[2:4], "big") + 1
+        实际w = x1_val - x0_val
+
+        udp.send(
+            f"实际w-h: {实际w, 实际h, 实际h * 实际w}  期望w-h: {期望w, 期望h, 期望像素}"
+        )
 
         # RAMWR (0x2C)
         self._dc.value(0)
-        # time.sleep(0.03 )
         self._spi.write(b"\x2c")
         self._cs_close()
-        
-        
 
+    def _set_window原始(self, x0, y0, x1, y1):
+        buf = bytearray(4)
 
-    def _color565(self, r, g=0, b=0):
-        if isinstance(r, (tuple, list)):
-            r, g, b = r[:3]
-        value = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-        return bytes([value >> 8, value & 0xFF])
+        # 设置列地址 CASET (0x2A)
+        self._write_cmd(0x2A)
+        buf[0] = (x0 >> 8) & 0xFF
+        buf[1] = x0 & 0xFF
+        buf[2] = (x1 >> 8) & 0xFF
+        buf[3] = x1 & 0xFF
+        udp.send(f"列设置: {buf}")
+        self._write_data_bytes(buf)
 
-    def _color666(self, r, g=0, b=0):
-        if isinstance(r, (tuple, list)):
-            r, g, b = r[:3]
-        return bytes([r & 0xFC, g & 0xFC, b & 0xFC])
+        # 设置行地址 RASET (0x2B)
+        self._write_cmd(0x2B)
+        buf[0] = (y0 >> 8) & 0xFF
+        buf[1] = y0 & 0xFF
+        buf[2] = (y1 >> 8) & 0xFF
+        buf[3] = y1 & 0xFF
+        udp.send(f"行设置: {buf}")
+        self._write_data_bytes(buf)
 
-    def _color888(self, r, g=0, b=0):
-        if isinstance(r, (tuple, list)):
-            r, g, b = r[:3]
-        return bytes([r, g, b])
+        # 准备写像素
+        self._write_cmd(0x2C)
+
+    def _set_window原始加偏移(self, x0, y0, x1, y1):
+        buf = bytearray(4)
+
+        if self._旋转 == 0:
+            self._列偏移 = self._像素缺失_左
+            self._行偏移 = self._像素缺失_顶
+        # elif self.旋转 == 1:
+        #     self._列偏移 = self._像素缺失_右
+        #     self._行偏移 = self._像素缺失_底
+        # elif self.旋转 == 2:
+        #     self._列偏移 = self._像素缺失_底
+        #     self._行偏移 = self._像素缺失_左
+        # else:
+        #     self._列偏移 = self._像素缺失_左
+        #     self._行偏移 = self._像素缺失_顶
+
+        x0 += self._列偏移
+        x1 += self._列偏移
+        y0 += self._行偏移
+        y1 += self._行偏移
+
+        # 设置列地址 CASET (0x2A)
+        self._write_cmd(0x2A)
+        buf[0] = (x0 >> 8) & 0xFF
+        buf[1] = x0 & 0xFF
+        buf[2] = (x1 >> 8) & 0xFF
+        buf[3] = x1 & 0xFF
+        udp.send(f"列起始: {buf}")
+        self._write_data_bytes(buf)
+
+        # 设置行地址 RASET (0x2B)
+        self._write_cmd(0x2B)
+        buf[0] = (y0 >> 8) & 0xFF
+        buf[1] = y0 & 0xFF
+        buf[2] = (y1 >> 8) & 0xFF
+        buf[3] = y1 & 0xFF
+        udp.send(f"行起始: {buf}")
+        self._write_data_bytes(buf)
+
+        # 准备写像素
+        self._write_cmd(0x2C)
+
+    def _test_像素裁剪(self, w, h):
+        self.fill原始(self.color.白)
+
+        if self._旋转 != 0:
+            raise ValueError("建议使用旋转0来裁剪，避免动脑。裁剪后可以所有旋转角度")
+
+        w, h = h, w
+        b = b""
+        背景色 = self.color_fn(255, 0, 0)  # 红
+        边框色 = self.color_fn(0, 255, 0)  # 绿
+        下边框色 = self.color_fn(255, 255, 255)
+        箭头色 = self.color_fn(0, 0, 255)  # 蓝
+        左上角色 = self.color_fn(255, 255, 255)
+        if w % 2 != 0:
+            b = 背景色
+        左上角色 = 边框色 + 左上角色 * ((w - 2) // 2)
+        左上角色 += 背景色 * ((w - 2) // 2) + b + 边框色
+
+        t_h = h // 2
+        buf = bytearray()
+        for i in range(h):
+            if i == 0 or i == h - 1:  # 上边框
+                buf.extend(边框色 * w)
+                continue
+            if i == h - 1:
+                buf.extend(下边框色 * w)
+                continue
+            if i < t_h:
+                buf.extend(左上角色)
+                continue
+            if i == t_h:  # 宽箭头
+                buf.extend(边框色 + 箭头色 * (w - 2) + 边框色)
+                continue
+            buf.extend(边框色 + 背景色 * (w - 2) + 边框色)
+
+        # 列箭头
+        mv = memoryview(buf)  # 避免索引不报错
+        index = 0
+        s = w * self._byte // 2  # 像素1/2
+        for i in range(h - 2):
+            index += w * self._byte  # 偏移一整行
+            mv[index + s : index + s + self._byte] = 箭头色
+
+        # 数据校验
+        if w * h * self._byte != len(buf):
+            raise ValueError(f"生成数据有误{len(buf) / self._byte}")
+
+        # 清屏
+        self._set_window原始加偏移(0, 0, w - 1, h - 1)
+        self._write_data_bytes(buf)
+        return (len(buf) / self._byte, w, h)
+
+    # def _test_像素裁剪(self, w, h):
+    #     self.fill原始(self.color.白)
+
+    #     if self._旋转 != 3:
+    #         raise ValueError("建议使用旋转3来裁剪，避免动脑。裁剪后可以所有旋转角度")
+
+    #     w = self._width
+    #     h = self._height
+    #     b = b""
+    #     背景色 = self.color_fn(255, 0, 0)  # 红
+    #     边框色 = self.color_fn(0, 255, 0)  # 绿
+    #     箭头色 = self.color_fn(0, 0, 255)  # 蓝
+    #     左上角色 = self.color_fn(255, 255, 255)
+    #     if h % 2 != 0:
+    #         b = 背景色
+    #     左上角色 = 边框色 + 左上角色 * ((h - 2) // 2)
+    #     左上角色 += 背景色 * ((h - 2) // 2) + b + 边框色
+
+    #     t_w = w // 2
+    #     buf = bytearray()
+    #     for i in range(w):
+    #         if i == 0 or i == w - 1:  # 左右边框
+    #             buf.extend(边框色 * h)
+    #             continue
+    #         if i < t_w:
+    #             buf.extend(左上角色)
+    #             continue
+    #         if i == t_w:  # 宽箭头
+    #             buf.extend(边框色 + 箭头色 * (h - 2) + 边框色)
+    #             continue
+    #         buf.extend(边框色 + 背景色 * (h - 2) + 边框色)
+
+    #     # 列箭头
+    #     index = 0
+    #     s = h * self._byte // 2  # 像素1/2
+    #     for i in range(w - 2):
+    #         index += h * self._byte  # 偏移一整行
+    #         buf[index + s : index + s + self._byte] = 箭头色
+
+    #     if w * h * self._byte != len(buf):
+    #         raise ValueError(f"生成数据有误{len(buf) / self._byte}")
+
+    #     self._set_window(0, 0, w - 1, h - 1)
+    #     self._write_data_bytes(buf)
+    #     return (len(buf) / self._byte, w, h)
+
+    # def zxc(self):
+    #     self.fill原始(self.color.白)
+    #     w = self._width
+    #     h = self._height
+    #     self._set_window(0, 0, w - 1, h - 1)
+
+    #     t = self.color_fn(0,255,0)
+    #     z = bytearray()
+    #     if h % 2 != 0:
+    #         b = t
+    #     z = t * (h // 2) + b
+    #     z += t * (h // 2)
+
+    #     for i in range(10):
+    #         self._write_data_bytes(z)
 
     # 方框测试
     def _test(self):
+        self.fill原始(self.color.白)
+
+        边框颜色 = self.color_fn(0, 255, 0)
         buf = bytearray()
         for i in range(self._width):
             if i == 0 or i == self._width - 1:
-                buf.extend(self.color.白 * self._height)
+                buf.extend(边框颜色 * self._height)
                 continue
-            buf.extend(
-                self.color.白 + self.color.紫 * (self._height - 2) + self.color.白
-            )
+            buf.extend(边框颜色 + self.color.红 * (self._height - 2) + 边框颜色)
 
         # 显示
         self._set_window(0, 0, self._width - 1, self._height - 1)
+        # self._set_window(0, 0, self._width - 1, self._height - 1)
         self._write_data_bytes(buf)
+
+        h = 1
+        while h < self._height:
+            self.txt(
+                "阿",
+                1,
+                h,
+                32,
+                self.color.白,
+                self.color.黑,
+                缓存=True,
+            )
+            h += 32
 
     # 更新速度测试
     def _test_spi(self):
@@ -950,14 +1307,34 @@ class LCD:
         self._cs_close()
         return ret
 
+    def _color565(self, r, g=0, b=0):
+        if isinstance(r, (tuple, list)):
+            r, g, b = r[:3]
+        value = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+        return bytes([value >> 8, value & 0xFF])
+
+    def _color666(self, r, g=0, b=0):
+        if isinstance(r, (tuple, list)):
+            r, g, b = r[:3]
+        return bytes([r & 0xFC, g & 0xFC, b & 0xFC])
+
+    def _color888(self, r, g=0, b=0):
+        if isinstance(r, (tuple, list)):
+            r, g, b = r[:3]
+        return bytes([r, g, b])
+
     # 清屏
     def fill(self, color):
         self._set_window(0, 0, self._width - 1, self._height - 1)
         # 一次性铺满
         self._write_data_bytes(color * (self._width * self._height))
 
+    def fill原始(self, color):
+        self._set_window原始(0, 0, self._height_驱动 - 1, self._width_驱动 - 1)
+        self._write_data_bytes(color * (self._height_驱动 * self._width_驱动))
+
     def txt(self, 字符串, x, y, size, 字体色, 背景色, 缓存):
-        s = time.ticks_ms()
+        # s = time.ticks_ms()
         # 终点字符，终点坐标
         new_str = []  # 处理非法数据后的字符串
         w = x - 1  # 终点坐标
@@ -968,7 +1345,7 @@ class LCD:
             return
 
         # 计算终点字符，终点坐标
-        for  字 in 字符串:
+        for 字 in 字符串:
             # 字符不存在用空格
             if 字 not in LCD._char.get(size, {}):
                 字 = " "
@@ -982,14 +1359,13 @@ class LCD:
             if w + t_w >= self._width:
                 break
             w += t_w
-         
-            new_str.append(字)
-        
 
-        # 设置显示范围 
+            new_str.append(字)
+
+        # 设置显示范围
         self._set_window(x, y, w, h)
         # return
-        
+
         # 显示字符
         for 字 in new_str:
             key = (字, size, 字体色, 背景色)  # 缓存key
@@ -1038,17 +1414,17 @@ class LCD:
             #     数据块.append(背景色 * t)
             # # udp.send(len(数据块))
             # zxc.extend(b"".join(数据块))
- 
+
             # 显示和加入缓存
             # zxc = memoryview(zxc)  zxc
-            # 是否加入缓存 
+            # 是否加入缓存
             if 缓存:
                 LCD._char_缓存[key] = zxc
-            # 无缓存显示  
+            # 无缓存显示
             self._write_data_bytes(zxc)
 
-        udp.send(time.ticks_ms() - s) 
- 
+        # udp.send(time.ticks_ms() - s)
+
     # ------- 字体 -------
     class def_字符:
         ascii = """ 1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ~·！@#￥%……&*（）——++-=、|【{}】；：‘“，《。》/？*~!@#$%^&*()-_=+[{}]\|;:'",<.>/?/*"""
