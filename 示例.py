@@ -32,7 +32,7 @@ def get_st(旋转):
         逆CS=False,
         像素缺失=(0, 0, 0, 0),
     )._init(反色=1, 左右镜像=1, rgb=1)  # .load_bmf("/字库.bmf")
-
+ 
     # st.fill(st.color.白)
 
     # st.load_bmf(
@@ -45,17 +45,18 @@ def get_st(旋转):
 
 # 显示字符
 st = get_st(3)
-st.txt(
+st.txt( 
     字符串="阿斯顿asd",
     x=20,
     y=20,
     size=32,
-    字体色=st.color.白,
+    字体色=st.color.红,
     背景色=st.color.黑,
     缓存=True,
 )
+time.sleep_ms(10)
 time.sleep(4)
-
+     
 # 丢弃像素
 # st._test_像素裁剪()
 # while True:
