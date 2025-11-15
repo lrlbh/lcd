@@ -1,48 +1,50 @@
-import socket
 import time
 from machine import SPI
-from lib import ili9488, lcd, udp, gc9a01, gc9107, st7796, st7796便宜
-
-驱动分辨率 = lcd.LCD.Size.st7796
-像素缺失 = lcd.LCD.像素缺失.st7789_1_9
-像素缺失 = (0, 0, 0, 0)
-
-# 老板子引脚
-spi = SPI(
-    1,
-    baudrate=100_000_000,
-    polarity=0,
-    phase=0,
-    sck=12,
-    mosi=13,
-    miso=None,  # 10
-)
+try:
+    import lcd
+except ImportError:
+    from lib import lcd
 
 
-st = lcd.LCD(
-    spi,
-    cs=47,
-    dc=21,
-    # rst=None,
-    rst=14,
-    bl=48,
-    size=驱动分辨率,
-    旋转=0,
-    color_bit=16,
-    逆CS=False,
-    像素缺失=像素缺失,
-)._init(反色=0, 左右镜像=0, rgb=0)  # 反色=True, RGB=True)
+def get_st(旋转):
+    # 老板子引脚
+    spi = SPI(
+        1,
+        baudrate=100_000_000,
+        polarity=0,
+        phase=0,
+        sck=12,
+        mosi=13,
+        miso=None,  # 10
+    )
 
-st.fill(st.color.白)
+    # lcd.def_字符.all = "的身份人格完善的法律就能很快就"
+    return lcd.LCD(
+        spi,
+        cs=47,
+        dc=21,
+        # rst=None,
+        rst=14,
+        bl=48,
+        size=lcd.LCD.Size.st7789,
+        旋转=旋转,
+        color_bit=16,
+        逆CS=False,
+        像素缺失=(0, 0, 0, 0),
+    )._init(反色=1, 左右镜像=1, rgb=1)  # .load_bmf("/字库.bmf")
 
-st._char[32] = {}
-st._char[32]["阿"] = bytes([0x00,0x00])
-st.def_字符.all = "的身份人格完善的法律就能很快就"
-st.load_bmf("/字库.bmf",{
-    16:"caxzsdgfsdfgDADSZF撒法帝国",
-    32:"zxcgvsedfg的说法是德国"
-})
+    # st.fill(st.color.白)
 
+    # st.load_bmf(
+    #     "/字库.bmf",
+    #     {
+    #         16: "caxzsdgfsdfgDADSZF撒法帝国",
+    #         32: "zxcgvsedfg的说法是德国",
+    #     },
+    # )
+
+# 显示字符
+st = get_st(3)
 st.txt(
     字符串="阿斯顿asd",
     x=20,
@@ -52,39 +54,24 @@ st.txt(
     背景色=st.color.黑,
     缓存=True,
 )
+time.sleep(4)
 
-st._test_像素裁剪()
-while True:
-    pass
-
-
-# 4角度旋转测试
+# 丢弃像素
+# st._test_像素裁剪()
 # while True:
-#     for i in range(0, 4):
-#         st = lcd.LCD(
-#             spi,
-#             cs=47,
-#             dc=21,
-#             rst=14,
-#             bl=48,
-#             size=驱动,
-#             旋转=i,
-#             color_bit=16,
-#             逆CS=False,
-#             像素缺失=像素补偿,
-#         )._init()#反色=True, RGB=True)
-#         # udp.send(f"-----------------旋转{i}---------------------")
-#         # udp.send(f"驱动分辨率w-h{st._width_驱动, st._height_驱动}")
-#         # udp.send(f"逻辑分辨率w-h{st._width, st._height}")
-#         # udp.send("----------------------------------------------")
-#         udp.send("")
-#         st._test()
-#         time.sleep(1)
-#         # time.sleep(1000000000)
+#     pass
 
 
-# 波形测试
-st.fill(st.color.黑)
+# 4角度旋转
+for i in range(0, 4):
+    st = get_st(i)
+    st._test()
+    time.sleep(3)
+    # time.sleep(1000000000)
+
+
+# 波形
+st = get_st(3)
 bx = st.new_波形(
     w起点=20,
     h起点=20,
