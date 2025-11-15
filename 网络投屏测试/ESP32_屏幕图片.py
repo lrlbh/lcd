@@ -1,7 +1,6 @@
 import socket
 from machine import SPI, Pin
-import test
-from lib import st7789, udp, st7796,st7735,test,gc9a01
+from lib import lcd, udp, st7796, gc9a01
 import struct
 import time
 
@@ -10,7 +9,6 @@ HOST = "192.168.1.9"
 PORT = 8848
 
 
- 
 # 老板子引脚
 spi = SPI(
     1,
@@ -19,21 +17,23 @@ spi = SPI(
     phase=0,
     sck=12,
     mosi=13,
-    miso=None,# 10
+    miso=None,  # 10
 )
-st = gc9a01.GC9A01(
-    spi, 
+# st = lcd.LCD(
+st = st7796.ST7796(
+    spi,
     cs=47,
-    dc=21, 
-    rst=14, # 14
+    dc=21,
+    # rst=None,
+    rst = 14,
     bl=48,
-    旋转=1,
-    color_bit=bit, 
-    逆CS= False,
-    w=240,  # 此乃屏幕原始比例参数
-    h=240, 
-    
-)._init()
+    size=lcd.LCD.Size.st7796,
+    旋转=0,
+    color_bit=16,
+    逆CS=False,
+    像素缺失=(0,0,0,0),
+)._init()#左右镜像= 0,rgb=0) 
+
 
 h = st._height
 w = st._width
@@ -42,7 +42,7 @@ if bit == 16:
     byte = 2
 
 buf = bytearray(w * h * byte)
-mv = memoryview(buf) 
+mv = memoryview(buf)
 
 # st._set_window(0, 0, w - 1, h - 1)
 # st._dc.value(1)
@@ -60,30 +60,27 @@ while True:
         s.sendall(struct.pack(">HHB7x", w, h, bit))
         udp.send("已协商格式")
 
-
         while True:
             # 废弃了整个屏幕更新，需要加入协议引入包，以及设置坐标
             s.readinto(协议mv)
             x, y, wl, hl = struct.unpack(">4I", 协议mv)
             size = wl * hl * byte
-            
+
             # 读取像素数据
             s.readinto(mv, size)
-            
-            st._set_window(x, y, x + wl-1, y + hl-1)
+
+            st._set_window(x, y, x + wl - 1, y + hl - 1)
             st._write_data_bytes(mv[:size])
 
-        
         while True:
-            
             # 废弃了整个屏幕更新，需要加入协议引入包，以及设置坐标
             s.readinto(协议mv)
             x, y, wl, hl = struct.unpack(">4I", 协议mv)
             size = wl * hl * byte
-            
+
             # 读取像素数据
             s.readinto(mv, size)
-            
+
             # st._set_window(x, y, x + wl-1, y + hl-1)
             # 展开_set_window函数，略微加快速度
             t = y
@@ -92,7 +89,7 @@ while True:
 
             # === CASET (0x2A) ===
             st._dc.value(0)
-            st._spi.write(b"\x2A")
+            st._spi.write(b"\x2a")
             st._dc.value(1)
 
             w_buf[0] = (y0 >> 8) & 0xFF
@@ -102,18 +99,18 @@ while True:
             st._spi.write(w_buf)
 
             st._dc.value(0)
-            st._spi.write(b"\x2B")
+            st._spi.write(b"\x2b")
             st._dc.value(1)
 
             w_buf[0] = (x >> 8) & 0xFF
             w_buf[1] = x & 0xFF
-            w_buf[2] = ((x + wl - 1) >> 8) & 0xFF 
+            w_buf[2] = ((x + wl - 1) >> 8) & 0xFF
             w_buf[3] = (x + wl - 1) & 0xFF
             st._spi.write(w_buf)
 
             # === RAMWR (0x2C) ===
             st._dc.value(0)
-            st._spi.write(b"\x2C")
+            st._spi.write(b"\x2c")
             st._dc.value(1)
 
             # ss = time.ticks_ms()

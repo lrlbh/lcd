@@ -2,29 +2,12 @@ import time
 
 import lcd
 
-class ILI9488(lcd.LCD):
-    def __init__(
-        self,
-        spi,
-        dc,
-        size,
-        bl=None,
-        rst=None,
-        cs=None,
-        旋转=3,
-        color_bit=18,  # 默认 18bit
-        像素缺失=(0, 0, 0, 0),
-        逆CS=False,
-    ):
-        super().__init__(
-            spi, dc, size, bl, rst, cs, 旋转, color_bit, 像素缺失, 逆CS
-        )
 
+class ILI9488(lcd.LCD):
     def _init(self):
         if self.__color_bit == 16:
-            raise ValueError("没有16bit")
-        
-        
+            raise ValueError("好像没有16bit，忘记了 --> 18 or 24")
+
         # === 复位 ===
         if self._rst is None:
             self._write_cmd(0x01)
@@ -54,7 +37,7 @@ class ILI9488(lcd.LCD):
 
         # === RGB/MCU 接口控制 ===
         self._write_cmd(0xB6)
-        self._write_data_bytes(b"\x02\x22\x3B")
+        self._write_data_bytes(b"\x02\x22\x3b")
 
         # === 内存访问方向 ===
         val = [0x00, 0x60, 0xC0, 0xA0][self._旋转]
@@ -67,9 +50,11 @@ class ILI9488(lcd.LCD):
         self._write_cmd(0x3A)
         if self.__color_bit == 16:
             self._write_data(0x55)
-        elif self.__color_bit in [18, 24]:
-            self._write_data(0x66)  # 18bit 模式
- 
+        elif self.__color_bit == 18:
+            self._write_data(0x66)
+        elif self.__color_bit == 24:
+            self._write_data(0x77)
+
         # === 接口模式控制 ===
         self._write_cmd(0xB0)
         self._write_data(0x00)
@@ -78,19 +63,19 @@ class ILI9488(lcd.LCD):
         self._write_cmd(0xB7)
         self._write_data(0xC6)
 
-        self._write_cmd(0xF7) 
-        self._write_data_bytes(b"\xA9\x51\x2C\x82")  # 调整控制
+        self._write_cmd(0xF7)
+        self._write_data_bytes(b"\xa9\x51\x2c\x82")  # 调整控制
 
         # === Gamma 正极 ===
         self._write_cmd(0xE0)
         self._write_data_bytes(
-            b"\x00\x08\x0C\x02\x0E\x04\x30\x45\x47\x04\x0C\x0A\x2E\x34\x0F"
+            b"\x00\x08\x0c\x02\x0e\x04\x30\x45\x47\x04\x0c\x0a\x2e\x34\x0f"
         )
 
         # === Gamma 负极 ===
         self._write_cmd(0xE1)
         self._write_data_bytes(
-            b"\x00\x11\x0D\x01\x0F\x05\x39\x36\x51\x06\x0F\x0D\x33\x37\x0F"
+            b"\x00\x11\x0d\x01\x0f\x05\x39\x36\x51\x06\x0f\x0d\x33\x37\x0f"
         )
 
         # === 其它辅助寄存器 ===

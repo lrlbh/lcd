@@ -21,11 +21,9 @@ class LCD:
 
         st7789 = (240, 320)
         st7796 = (320, 480)
-        
-        
+
         ili9488 = (320, 480)
-        
-        
+
         gc9a01 = (240, 240)
         gc9107 = (128, 160)
 
@@ -40,7 +38,7 @@ class LCD:
 
         # 1.8寸 128* 160
         st7735_1_8 = (1, 1, 2, 2)
-        
+
         # 0.85寸 128* 128
         gc9107_0_85 = (32, 0, 0, 0)
 
@@ -58,8 +56,6 @@ class LCD:
 
         # 1.9寸 170 * 320
         st7789_1_9 = (0, 0, 35, 35)
-
-
 
     # 加速set_window
     _window缓存 = bytearray(4)
@@ -840,7 +836,7 @@ class LCD:
             self._cs_on = 1
             self._cs_off = 0
 
-    def _init(self, 反色=True, RGB=False):
+    def _init(self, 反色=1, rgb=1,左右镜像 = 1):
         # 复位
         if self._rst is None:
             self._write_cmd(0x01)
@@ -854,14 +850,20 @@ class LCD:
         self._write_cmd(0x11)
         time.sleep_ms(120)
 
-        # 扫描方向，扫描格式
-        # 4方向扫描
-        # RGB/BGR 顺序
+        # === 扫描方向 ===
+        # 0: 正常 / 1: 90° / 2: 180° / 3: 270°
+        # 参考 ST7796 寄存器 0x36（MADCTL）
+        # 默认 val 数组对应 旋转角度下 MY/MX/MV 三位组合
         val = [0x00, 0x60, 0xC0, 0xA0][self._旋转]
-        if not RGB:
-            val |= 0x08
-        self._write_cmd(0x36)
-        self._write_data(val)
+        # 左右镜像（MX）控制
+        if not 左右镜像:
+            val ^= 0x40  # 取反 MX 位（D6）
+        # RGB/BGR 控制
+        if rgb:
+            val &= ~0x08  # D3=0 表示 BGR
+        else:
+            val |= 0x08  # D3=1 表示 RGB
+        # self._write_data(0x28)
 
         # 像素格式  888 666 565
         self._write_cmd(0x3A)
@@ -873,7 +875,9 @@ class LCD:
         elif self.__color_bit == 24:
             self._write_data(0x77)
             
-            
+        # 写入 MADCTL
+        self._write_cmd(0x36)
+        self._write_data(val)
 
         # === 反色显示（可选）===
         # 命令 0x21：Inversion ON s
@@ -992,9 +996,9 @@ class LCD:
         y0 += self._行偏移
         y1 += self._行偏移
 
-        期望w = x1 - x0 + 1
-        期望h = y1 - y0 + 1
-        期望像素 = 期望w * 期望h
+        # 期望w = x1 - x0 + 1
+        # 期望h = y1 - y0 + 1
+        # 期望像素 = 期望w * 期望h
 
         # 逻辑列刷新核心逻辑
         # if self._旋转==0  or self._旋转==3:
@@ -1006,7 +1010,7 @@ class LCD:
         #     y0 = self._width_驱动 - y1 - 1
         #     y1 = self._width_驱动 - t - 1
 
-        udp.send(f"旋转:{self._旋转}  高: {self._height_驱动}")
+        # udp.send(f"旋转:{self._旋转}  高: {self._height_驱动}")
         t = y0
         y0 = self._height_驱动 - y1 - 1
         y1 = self._height_驱动 - t - 1
@@ -1024,7 +1028,7 @@ class LCD:
         # x0,x1 = y0,y1
         # y0,y1 = t0,t1
 
-        udp.send(f"{x0, x1, y0, y1}")
+        # udp.send(f"{x0, x1, y0, y1}")
         # y0 = 0
         # y1 = 239
 
@@ -1040,11 +1044,11 @@ class LCD:
         buf[2] = (y1 >> 8) & 0xFF
         buf[3] = y1 & 0xFF
         self._spi.write(buf)
-        udp.send(f"列设置: {buf}")
+        # udp.send(f"列设置: {buf}")
 
-        y0_val = int.from_bytes(buf[0:2], "big")
-        y1_val = int.from_bytes(buf[2:4], "big") + 1
-        实际h = y1_val - y0_val
+        # y0_val = int.from_bytes(buf[0:2], "big")
+        # y1_val = int.from_bytes(buf[2:4], "big") + 1
+        # 实际h = y1_val - y0_val
 
         # 行地址
         self._dc.value(0)
@@ -1055,15 +1059,15 @@ class LCD:
         buf[2] = (x1 >> 8) & 0xFF
         buf[3] = x1 & 0xFF
         self._spi.write(buf)
-        udp.send(f"行设置: {buf}")
+        # udp.send(f"行设置: {buf}")
 
-        x0_val = int.from_bytes(buf[0:2], "big")
-        x1_val = int.from_bytes(buf[2:4], "big") + 1
-        实际w = x1_val - x0_val
+        # x0_val = int.from_bytes(buf[0:2], "big")
+        # x1_val = int.from_bytes(buf[2:4], "big") + 1
+        # 实际w = x1_val - x0_val
 
-        udp.send(
-            f"实际w-h: {实际w, 实际h, 实际h * 实际w}  期望w-h: {期望w, 期望h, 期望像素}"
-        )
+        # udp.send(
+        #     f"实际w-h: {实际w, 实际h, 实际h * 实际w}  期望w-h: {期望w, 期望h, 期望像素}"
+        # )
 
         # RAMWR (0x2C)
         self._dc.value(0)
@@ -1079,7 +1083,7 @@ class LCD:
         buf[1] = x0 & 0xFF
         buf[2] = (x1 >> 8) & 0xFF
         buf[3] = x1 & 0xFF
-        udp.send(f"列设置: {buf}")
+        # udp.send(f"列设置: {buf}")
         self._write_data_bytes(buf)
 
         # 设置行地址 RASET (0x2B)
@@ -1088,7 +1092,7 @@ class LCD:
         buf[1] = y0 & 0xFF
         buf[2] = (y1 >> 8) & 0xFF
         buf[3] = y1 & 0xFF
-        udp.send(f"行设置: {buf}")
+        # udp.send(f"行设置: {buf}")
         self._write_data_bytes(buf)
 
         # 准备写像素
@@ -1121,7 +1125,7 @@ class LCD:
         buf[1] = x0 & 0xFF
         buf[2] = (x1 >> 8) & 0xFF
         buf[3] = x1 & 0xFF
-        udp.send(f"列起始: {buf}")
+        # udp.send(f"列起始: {buf}")
         self._write_data_bytes(buf)
 
         # 设置行地址 RASET (0x2B)
@@ -1130,19 +1134,19 @@ class LCD:
         buf[1] = y0 & 0xFF
         buf[2] = (y1 >> 8) & 0xFF
         buf[3] = y1 & 0xFF
-        udp.send(f"行起始: {buf}")
+        # udp.send(f"行起始: {buf}")
         self._write_data_bytes(buf)
 
         # 准备写像素
         self._write_cmd(0x2C)
 
-    def _test_像素裁剪(self, w, h):
-        self.fill原始(self.color.白)
+    def _test_像素裁剪(self):
+        self.fill原始(self.color_fn(255, 255, 255))
 
         if self._旋转 != 0:
-            raise ValueError("建议使用旋转0来裁剪，避免动脑。裁剪后可以所有旋转角度")
+            raise ValueError("建议使用旋转0来裁剪，避免动脑。裁剪后可用于所有旋转角度")
 
-        w, h = h, w
+        w, h = self._height, self._width
         b = b""
         背景色 = self.color_fn(255, 0, 0)  # 红
         边框色 = self.color_fn(0, 255, 0)  # 绿

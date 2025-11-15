@@ -1,36 +1,9 @@
 import time
-from machine import Pin
 import lcd
 import asyncio
 
 
 class GC9107(lcd.LCD):
-    def __init__(
-        self,
-        spi,
-        dc,
-        size,
-        bl=None,
-        rst=None,
-        cs=None,
-        旋转=3,
-        color_bit=16,
-        像素缺失=(0, 0, 0, 0),
-        逆CS=False,
-    ):
-        # 初始化基类
-        super().__init__(
-            spi,
-            dc,
-            size,
-            bl,
-            rst,
-            cs,
-            旋转,
-            color_bit,
-            像素缺失,
-            逆CS,
-        )
 
 
     def _init(self, 反色=True, RGB=True):
