@@ -1,15 +1,17 @@
-import gc
 import time
 from machine import Pin, SPI
 import struct
 
-from lib import udp
+
+
+
 
 
 class LCD:
-    class Size:
-        # W -- H
 
+    class Size:
+        
+        # W -- H
         st7735 = (132, 162)
 
         # 推测是ili9163,排线上也没有引出读取脚
@@ -836,7 +838,7 @@ class LCD:
             self._cs_on = 1
             self._cs_off = 0
 
-    def _init(self, 反色=1, rgb=1,左右镜像 = 1):
+    def _init(self, 反色=1, rgb=1, 左右镜像=1):
         # 复位
         if self._rst is None:
             self._write_cmd(0x01)
@@ -874,7 +876,7 @@ class LCD:
             self._write_data(0x66)
         elif self.__color_bit == 24:
             self._write_data(0x77)
-            
+
         # 写入 MADCTL
         self._write_cmd(0x36)
         self._write_data(val)
@@ -893,7 +895,7 @@ class LCD:
 
         # === 清屏 ===
         # 使用基础灰阶黑色填充整个屏幕
-        # self.fill(self.color.黑)
+        self.fill(self.color.黑)
         return self
 
     async def init_async(self):
@@ -1337,7 +1339,21 @@ class LCD:
         self._set_window原始(0, 0, self._height_驱动 - 1, self._width_驱动 - 1)
         self._write_data_bytes(color * (self._height_驱动 * self._width_驱动))
 
-    def txt(self, 字符串, x, y, size, 字体色, 背景色, 缓存):
+    def txt(
+        self,
+        字符串,
+        x,
+        y,
+        size,
+        字体色 = None,
+        背景色 = None,
+        缓存 = False,
+    ):
+        if 字体色 is None:
+            字体色 = self.color.白
+        if 背景色 is None:
+            背景色 = self.color.黑
+        
         # s = time.ticks_ms()
         # 终点字符，终点坐标
         new_str = []  # 处理非法数据后的字符串
@@ -1782,3 +1798,7 @@ class 预设色24位:
     橙 = b"\xf8\x90\x30"  # (248,144,48)
     紫 = b"\x98\x58\xd0"  # (152,88,208)
     粉 = b"\xf8\xb0\xc0"  # (248,176,192)
+
+
+
+

@@ -1,7 +1,432 @@
+# 来源
+
+我总是喜欢在网上买，最有性价比，最便宜的屏幕。
+
+然而每次找驱动都要很多时间，micropython使用者较少，一些驱动根本找不到，而且换屏幕都要换驱动，接口不同，改代码也是非常恶心，就算找到了，一些驱动速度非常慢，基本也就是看个亮。
+
+我打算自己写一个驱动看看。
+
+当我写到第二个的时候，我发现所有屏幕操作逻辑都是相同的。和过去学系统编程、网络编程一样，这些操作是有规范的，只需要重写_init即可
+
+当我写到第三个的时候发现，大部分屏幕，都不需要校准参数，_init也不需要重写，而且大部分商家发送资料根本无法对应屏幕，所谓校准参数有多大用，也是存疑。所以我写了这个通用驱动。
+
+当然我只学了一两个星期，也没有找到合适的教程，结论都是写代码过程中的归类，所以我的结论肯定有大量的错误，清楚来龙去脉即可，不要相信，请指正。
+
+
+
+# 使用示例
+
+## 初始化
+
+~~~python
+# SPI
+spi = SPI(
+    1,
+    baudrate=100_000_000,
+    polarity=0,
+    phase=0,
+    sck=12,
+    mosi=13,
+    miso=None,  # 10
+)
+
+# 在lib目录中找到lcd.py
+# 大部分屏幕都可以使用lcd来初始化
+# 无法工作的屏幕可以在lib目录中寻找 "驱动名称.py"，里面重写了lcd.py中的_init函数
+# 如果无法找到，只需要将商家提供的初始化代码发送给gpt,让它重写_init方法即可
+# 已知需要校准的屏幕:
+	# gca9a01,需要使用商家提供的校准参数，否则工作怪异
+	# gc9107,需要使用商家提供的校准参数,否则有点细微问题
+st = lcd.LCD(
+    spi,	# spi 对象
+    cs=47,	# cs 引脚，不使用传入None
+    dc=21,  # dc 引脚
+    rst = 14,	# 重启引脚，软件初始传入None
+    bl=48,		# 背光引脚，不使用传入None
+    size=lcd.LCD.Size.st7796, # 驱动原始分辨率，用于被裁剪的屏幕，在4个旋转角度，自动生成对应偏移
+    # 在 LCD.Size 中定义了一些已知的分辨率，参数格式 st7796 = (320, 480)
+    旋转=0,	# 4角度旋转 0~3
+    color_bit=16,	# 16 18 24，实际上16bit,和其他看不出区别
+    逆CS=False,		# True = 高电平使能，我没到遇到高电平使能的，主要考虑引脚复用
+    像素缺失=lcd.LCD.像素缺失.st7789_1_14, 	# 实际屏幕在0旋转时，4个角度丢失的像素
+    # 可用st._test_像素裁剪()查看丢失的像素，格式(0,0,0,0)代表 上 下 左 右
+)._init(反色=1,左右镜像= 1,rgb=1)  # 考虑到初始化需要加延迟，所以单独一个函数方便使用 asyncio
+	# 黑白颜色反了用 反色
+    # 左右倒了用 左右镜像
+    # 红蓝颜色反了用 rgb
+    
+    
+# 实际上初始化大概率只需这三个参数: spi,dc,驱动分辨率
+st = lcd.LCD(
+    spi,
+    dc=21,
+    size=lcd.LCD.Size.st7796
+)._init()
+~~~
+
+
+
+## 字符显示
+
+~~~python
+st.txt(
+    字符串="阿斯顿asd",	# 要显示什么字符串
+    x=20,	# 宽起点
+    y=20,	# 高起点
+    size=32,	# 字体大小
+    字体色=st.color.白,	# 字体色
+    背景色=st.color.黑,	# 背景色
+    缓存=True,	# 本次显示的字符中，有未被缓存的，是否加入缓存。有缓存是包用的，不受影响。
+)
+
+################使用取模软件时，字体右旋转90度###############################
+
+# 常用软件导入
+# lcd里面有一个_char属性用于保存点阵字符，里面为了方便调试加了几个字符，可以查看加入点阵字符的方式
+st._char[32] = {}
+st._char[32]["阿"] = bytes([0x00,0x00...])
+
+# 从字库中加载
+# 字库生成软件在这里 https://github.com/lrlbh/lcd字库
+# 某天不小心把加载完整字库的函数删了，现在只能用选择性加载
+
+# 方式1: def 字符中内置了16,24,32,40,48,56,64,72的ascii和几个常用字符，你可以继续添加
+st.def_字符.all = "的身份人格完善的法律就能很快就"
+st.load_bmf("/字库.bmf")
+
+# 方式2:
+st.load_bmf("/字库.bmf",{
+    16:"caxzsdgfsdfgDADSZF撒法帝国",
+    32:"zxcgvsedfg的说法是德国"
+})
+~~~
+
+
+
+## 小工具
+
+~~~python
+# 清屏，这个屏幕一次清除的，如果内存小，里面发送数据循环一下
+st.fill(st.color.白)
+
+# 颜色
+st.color.XX # 可以访问内置颜色，不同实例指向不同bit，多屏幕可以放心使用
+st.color_fn(255,255,255) # RGB顺序创建一个颜色，不同bit指向不同函数，修改bit也没事
+
+# 同一款驱动基本只有一个分辨率，然而有多种分辨率屏幕，实际上有些没有使用，遇到这种情况需要计算
+# 运行后显示一个图案，四周有边框，白色表示左上方
+# 通过初始化时的参数 像素缺失= (0,0,0,0) 丢弃四边的像素，知道边框出现即可
+# 调整旋转0即可，其他3个角度会自动适配，前提是初始化时驱动分辨率参数 size=(240,320) 传入正确
+st._test_像素裁剪()	
+
+
+# 旋转屏幕，查看偏移有没有问题
+st._test()
+# 4角度旋转测试
+while True:
+    for i in range(0, 4):
+        st = lcd.LCD(
+            spi,
+            cs=47,
+            dc=21,
+            rst=14,
+            bl=48,
+            size=驱动,
+            旋转=i,
+            color_bit=16,
+            逆CS=False,
+            像素缺失=像素补偿,
+        )._init()#反色=True, RGB=True)
+        # udp.send(f"-----------------旋转{i}---------------------")
+        # udp.send(f"驱动分辨率w-h{st._width_驱动, st._height_驱动}")
+        # udp.send(f"逻辑分辨率w-h{st._width, st._height}")
+        # udp.send("----------------------------------------------")
+        st._test()
+        time.sleep(1)
+~~~
+
+
+
+## 波形显示
+
+~~~python
+# 波形测试
+st.fill(st.color.黑)
+bx = st.new_波形(
+    w起点=20,	# 宽起点
+    h起点=20,	# 高起点
+    size_w=200,	# 波形区域宽
+    size_h=50,	# 波形区域高
+    波形像素=[3, 3, 3],	# 波形性有多粗，列表是因为可以传入多个通道数据
+    多少格=998,	# 加了网格不好看，已废弃，没用
+    data_min=[0, 0, 0],	# 每个通道，显示范围
+    data_max=[33, 66, 99],# 每个通道，显示范围
+    波形色=[st.color.红, st.color.绿, st.color.蓝], # 每个通道的颜色
+    背景色=st.color.白, # 波形区域背景色
+)
+
+bx1 = st.new_波形(
+    w起点=20,
+    h起点=90,
+    size_w=200,
+    size_h=100,
+    波形像素=[6, 6, 6],
+    多少格=998,
+    data_min=[0, 0, 0],
+    data_max=[33, 66, 99],
+    波形色=[st.color.红, st.color.绿, st.color.蓝],
+    背景色=st.color.白,
+)
+
+
+bx2 = st.new_波形(
+    w起点=20,
+    h起点=210,
+    size_w=200,
+    size_h=50,
+    波形像素=[6, 6, 6],
+    多少格=998,
+    data_min=[0, 0, 0],
+    data_max=[33, 66, 99],
+    波形色=[st.color.红, st.color.绿, st.color.蓝],
+    背景色=st.color.白,
+)
+
+
+bx3 = st.new_波形(
+    w起点=20,
+    h起点=280,
+    size_w=200,
+    size_h=40,
+    波形像素=[4, 4, 4],
+    多少格=998,
+    data_min=[0, 0, 0],
+    data_max=[33, 66, 99],
+    波形色=[st.color.红, st.color.绿, st.color.蓝],
+    背景色=st.color.白,
+)
+
+
+t1, t2, t3 = 0, 0, 0
+tt1, tt2, tt3 = 1, 1, 1
+
+while True:
+
+    bx.append_data([t1, t2, t3])	# 添加一个点数据
+    bx.更新()	# 里面有一份环形内存，保存了完整波形数据，不用每次都更新，有空了更新一下就行
+
+    bx1.append_data([t1, t2, t3])
+    bx1.更新()
+
+    bx2.append_data([t1, t2, t3])
+    bx2.更新()
+
+    bx3.append_data([t1, t2, t3])
+    bx3.更新()
+
+    # udp.send(t1)
+    # udp.send(t2)
+    # udp.send(t3)
+    if t1 >= 33:
+        tt1 = -1
+    if t2 >= 66:
+        tt2 = -1
+    if t3 >= 99:
+        tt3 = -1
+    if t1 <= 0:
+        tt1 = 1
+    if t2 <= 0:
+        tt2 = 1
+    if t3 <= 0:
+        tt3 = 1
+    t1 += tt1
+    t2 += tt2
+    t3 += tt3
+
+~~~
+
+
+
+## 可直接运行的示例
+
+~~~python
+# 也许可以在 示例.py 中找到最新的
+
+import time
+from machine import SPI
+try:
+    import lcd
+except ImportError:
+    from lib import lcd
+
+
+def get_st(旋转):
+    # 老板子引脚
+    spi = SPI(
+        1,
+        baudrate=100_000_000,
+        polarity=0,
+        phase=0,
+        sck=12,
+        mosi=13,
+        miso=None,  # 10
+    )
+
+    # lcd.def_字符.all = "的身份人格完善的法律就能很快就"
+    return lcd.LCD(
+        spi,
+        cs=47,
+        dc=21,
+        # rst=None,
+        rst=14,
+        bl=48,
+        size=lcd.LCD.Size.st7789,
+        旋转=旋转,
+        color_bit=16,
+        逆CS=False,
+        像素缺失=(0, 0, 0, 0),
+    )._init(反色=1, 左右镜像=1, rgb=1)  # .load_bmf("/字库.bmf")
+
+    # st.fill(st.color.白)
+
+    # st.load_bmf(
+    #     "/字库.bmf",
+    #     {
+    #         16: "caxzsdgfsdfgDADSZF撒法帝国",
+    #         32: "zxcgvsedfg的说法是德国",
+    #     },
+    # )
+
+# 显示字符
+st = get_st(3)
+st.txt(
+    字符串="阿斯顿asd",
+    x=20,
+    y=20,
+    size=32,
+    字体色=st.color.白,
+    背景色=st.color.黑,
+    缓存=True,
+)
+time.sleep(4)
+
+# 丢弃像素
+# st._test_像素裁剪()
+# while True:
+#     pass
+
+
+# 4角度旋转
+for i in range(0, 4):
+    st = get_st(i)
+    st._test()
+    time.sleep(3)
+    # time.sleep(1000000000)
+
+
+# 波形
+st = get_st(3)
+bx = st.new_波形(
+    w起点=20,
+    h起点=20,
+    size_w=200,
+    size_h=50,
+    波形像素=[3, 3, 3],
+    多少格=998,
+    data_min=[0, 0, 0],
+    data_max=[33, 66, 99],
+    波形色=[st.color.红, st.color.绿, st.color.蓝],
+    背景色=st.color.白,
+)
+
+bx1 = st.new_波形(
+    w起点=20,
+    h起点=90,
+    size_w=200,
+    size_h=100,
+    波形像素=[6, 6, 6],
+    多少格=998,
+    data_min=[0, 0, 0],
+    data_max=[33, 66, 99],
+    波形色=[st.color.红, st.color.绿, st.color.蓝],
+    背景色=st.color.白,
+)
+
+
+bx2 = st.new_波形(
+    w起点=20,
+    h起点=210,
+    size_w=200,
+    size_h=50,
+    波形像素=[6, 6, 6],
+    多少格=998,
+    data_min=[0, 0, 0],
+    data_max=[33, 66, 99],
+    波形色=[st.color.红, st.color.绿, st.color.蓝],
+    背景色=st.color.白,
+)
+
+
+bx3 = st.new_波形(
+    w起点=20,
+    h起点=280,
+    size_w=200,
+    size_h=40,
+    波形像素=[4, 4, 4],
+    多少格=998,
+    data_min=[0, 0, 0],
+    data_max=[33, 66, 99],
+    波形色=[st.color.红, st.color.绿, st.color.蓝],
+    背景色=st.color.白,
+)
+
+
+t1, t2, t3 = 0, 0, 0
+tt1, tt2, tt3 = 1, 1, 1
+
+while True:
+    bx.append_data([t1, t2, t3])
+    bx.更新()
+
+    bx1.append_data([t1, t2, t3])
+    bx1.更新()
+
+    bx2.append_data([t1, t2, t3])
+    bx2.更新()
+
+    bx3.append_data([t1, t2, t3])
+    bx3.更新()
+
+    # udp.send(t1)
+    # udp.send(t2)
+    # udp.send(t3)
+    if t1 >= 33:
+        tt1 = -1
+    if t2 >= 66:
+        tt2 = -1
+    if t3 >= 99:
+        tt3 = -1
+    if t1 <= 0:
+        tt1 = 1
+    if t2 <= 0:
+        tt2 = 1
+    if t3 <= 0:
+        tt3 = 1
+    t1 += tt1
+    t2 += tt2
+    t3 += tt3
+
+~~~
+
+
+
+
+
+
+
 # 可以更新功能
 
 - 有一个硬件波形，试试看
-- 使用示例
 - 使用新的刷新逻辑，先上后下，在左在右
   - 当初为了实现列刷新，我简单看了一下4个角度显示内容，发现只要两个简单操作就可以
   - 内容右旋90度然后补偿一个逻辑高度就可以
@@ -14,6 +439,8 @@
 - 3线spi，还可以省略 DC 引脚
 
 
+
+- ~~使用示例~~
 
 - ~~TE引脚播放视频测试~~
 
@@ -97,7 +524,7 @@
 # 在github上看到过，有人通过修改固件硬盘读取速度达到了6M还是8M去了，修改前速度和我基本一致
 
 
-# WIFI速度 N年前拉宽带自带的，距离几十里面
+# WIFI速度 N年前拉宽带自带的路由器，距离几十厘米
 
 # Wi-Fi 已连接: 192.168.1.11
 # TCP 已连接

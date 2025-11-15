@@ -20,7 +20,7 @@ spi = SPI(
     miso=None,  # 10
 )
 # st = lcd.LCD(
-st = st7796.ST7796(
+st = lcd.LCD(
     spi,
     cs=47,
     dc=21,
