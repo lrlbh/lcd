@@ -2,25 +2,8 @@ import time
 from machine import Pin
 import lcd
 
-
+# 和不用校准参数看不出区别，就当有病治病没变强身了
 class ST7796(lcd.LCD):
-    def __init__(
-        self,
-        spi,
-        dc,
-        size,
-        bl=None,
-        rst=None,
-        cs=None,
-        旋转=3,
-        color_bit=16,
-        像素缺失=(0, 0, 0, 0),
-        逆CS=False,
-    ):
-        super().__init__(
-            spi, dc, size, bl, rst, cs, 旋转, color_bit, 像素缺失, 逆CS
-        )
-
     def _init(self):
         """ST7796 初始化流程（逻辑列刷新版本）"""
 
