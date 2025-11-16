@@ -1,11 +1,6 @@
 import asyncio
 import time
 from machine import Pin, SPI
-import struct
-
-
-
-
 
 
 class LCD:
@@ -63,9 +58,6 @@ class LCD:
     # 加速set_window
     _window缓存 = bytearray(4)
 
-    # 加速点阵数据转像素数据
-    # _char_buf_t = bytearray(72 * 72 * 3)
-    # _char_buf = memoryview(_char_buf_t)
     # 像素数据
     # char_缓存[(背景色,字体色,字,字号)] = bytes
     _char_缓存 = {}
@@ -853,7 +845,10 @@ class LCD:
         self._write_cmd(0x11)
         time.sleep_ms(120)
 
-
+        # === 扫描方向 ===
+        # 0: 正常 / 1: 90° / 2: 180° / 3: 270°
+        # 参考 ST7796 寄存器 0x36（MADCTL）
+        # 默认 val 数组对应 旋转角度下 MY/MX/MV 三位组合
         # === 扫描方向 ===
         # 0: 正常 / 1: 90° / 2: 180° / 3: 270°
         # 参考 ST7796 寄存器 0x36（MADCTL）
@@ -901,7 +896,7 @@ class LCD:
         return self
 
     async def _init_async(self, 反色=1, rgb=1, 左右镜像=1):
-        # 复位
+                # 复位
         if self._rst is None:
             self._write_cmd(0x01)
         else:
@@ -958,57 +953,6 @@ class LCD:
         # 使用基础灰阶黑色填充整个屏幕
         self.fill(self.color.黑)
         return self
-
-    # 简单图片显示，评估一下屏幕素质和全视角，前面的图片处理函数被不小心删了
-    def show_bmp(self, path, x=0, y=0, max_w=None, max_h=None):
-        with open(path, "rb") as f:
-            # 读取 BMP 头
-            if f.read(2) != b"BM":
-                raise ValueError("不是 BMP 文件")
-
-            f.seek(10)
-            pixel_offset = struct.unpack("<I", f.read(4))[0]  # 图像数据偏移
-
-            f.seek(18)
-            width = struct.unpack("<I", f.read(4))[0]
-            height = struct.unpack("<I", f.read(4))[0]
-
-            f.seek(28)
-            bpp = struct.unpack("<H", f.read(2))[0]
-            if bpp != 24:
-                raise ValueError("仅支持 24bit BMP")
-
-            # 限制显示范围
-            if max_w:
-                width = min(width, max_w)
-            if max_h:
-                height = min(height, max_h)
-
-            # 移动到像素区
-            f.seek(pixel_offset)
-
-            # BMP 按行从下到上，需要翻转
-            self._set_window(x, y, x + width - 1, y + height - 1)
-            self._dc.value(1)
-            self._cs_open()
-
-            line_bytes = ((width * 3 + 3) // 4) * 4  # 每行 4 字节对齐
-            buf = bytearray(width * 3)
-            for row in range(height - 1, -1, -1):
-                f.seek(pixel_offset + row * line_bytes)
-                f.readinto(buf)
-                # BGR -> RGB
-                for i in range(0, width * 3, 3):
-                    b, g, r = buf[i], buf[i + 1], buf[i + 2]
-                    if self.__color_bit == 16:
-                        color = self._color565(r, g, b)
-                    elif self.__color_bit == 18:
-                        color = self._color666(r, g, b)
-                    else:
-                        color = self._color888(r, g, b)
-                    self._spi.write(color)
-
-            self._cs_close()
 
     # ------- 基本IO -------
     def _cs_open(self):
@@ -1251,68 +1195,6 @@ class LCD:
         self._set_window原始加偏移(0, 0, w - 1, h - 1)
         self._write_data_bytes(buf)
         return (len(buf) / self._byte, w, h)
-
-    # def _test_像素裁剪(self, w, h):
-    #     self.fill原始(self.color.白)
-
-    #     if self._旋转 != 3:
-    #         raise ValueError("建议使用旋转3来裁剪，避免动脑。裁剪后可以所有旋转角度")
-
-    #     w = self._width
-    #     h = self._height
-    #     b = b""
-    #     背景色 = self.color_fn(255, 0, 0)  # 红
-    #     边框色 = self.color_fn(0, 255, 0)  # 绿
-    #     箭头色 = self.color_fn(0, 0, 255)  # 蓝
-    #     左上角色 = self.color_fn(255, 255, 255)
-    #     if h % 2 != 0:
-    #         b = 背景色
-    #     左上角色 = 边框色 + 左上角色 * ((h - 2) // 2)
-    #     左上角色 += 背景色 * ((h - 2) // 2) + b + 边框色
-
-    #     t_w = w // 2
-    #     buf = bytearray()
-    #     for i in range(w):
-    #         if i == 0 or i == w - 1:  # 左右边框
-    #             buf.extend(边框色 * h)
-    #             continue
-    #         if i < t_w:
-    #             buf.extend(左上角色)
-    #             continue
-    #         if i == t_w:  # 宽箭头
-    #             buf.extend(边框色 + 箭头色 * (h - 2) + 边框色)
-    #             continue
-    #         buf.extend(边框色 + 背景色 * (h - 2) + 边框色)
-
-    #     # 列箭头
-    #     index = 0
-    #     s = h * self._byte // 2  # 像素1/2
-    #     for i in range(w - 2):
-    #         index += h * self._byte  # 偏移一整行
-    #         buf[index + s : index + s + self._byte] = 箭头色
-
-    #     if w * h * self._byte != len(buf):
-    #         raise ValueError(f"生成数据有误{len(buf) / self._byte}")
-
-    #     self._set_window(0, 0, w - 1, h - 1)
-    #     self._write_data_bytes(buf)
-    #     return (len(buf) / self._byte, w, h)
-
-    # def zxc(self):
-    #     self.fill原始(self.color.白)
-    #     w = self._width
-    #     h = self._height
-    #     self._set_window(0, 0, w - 1, h - 1)
-
-    #     t = self.color_fn(0,255,0)
-    #     z = bytearray()
-    #     if h % 2 != 0:
-    #         b = t
-    #     z = t * (h // 2) + b
-    #     z += t * (h // 2)
-
-    #     for i in range(10):
-    #         self._write_data_bytes(z)
 
     # 方框测试
     def _test(self):
@@ -1648,26 +1530,6 @@ class LCD:
 
         return self
 
-    # 旋转像素
-    def _rotate_char_left_90(self, key):
-        src = LCD._char_缓存[key]
-
-        # 根据 key 里的 size 推宽高（你这里自己写）
-        size = key[1]
-        w = size
-        h = size  # 如果是等宽等高字体你就这样填，如果你有真实宽高，就换成你原来的取值
-
-        pixel_size = len(src) // (w * h)  # 自动判断 2字节 or 3字节
-
-        dst = bytearray(len(src))
-
-        for y in range(h):
-            for x in range(w):
-                i_src = (y * w + x) * pixel_size
-                i_dst = ((w - 1 - x) * h + y) * pixel_size
-                dst[i_dst : i_dst + pixel_size] = src[i_src : i_src + pixel_size]
-
-        LCD._char_缓存[key] = dst
 
     def new_波形(
         self,
