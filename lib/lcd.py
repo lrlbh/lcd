@@ -1,3 +1,4 @@
+import asyncio
 import time
 from machine import Pin, SPI
 import struct
@@ -852,10 +853,12 @@ class LCD:
         self._write_cmd(0x11)
         time.sleep_ms(120)
 
+
         # === 扫描方向 ===
         # 0: 正常 / 1: 90° / 2: 180° / 3: 270°
         # 参考 ST7796 寄存器 0x36（MADCTL）
         # 默认 val 数组对应 旋转角度下 MY/MX/MV 三位组合
+        self._write_cmd(0x36)
         val = [0x00, 0x60, 0xC0, 0xA0][self._旋转]
         # 左右镜像（MX）控制
         if not 左右镜像:
@@ -865,7 +868,8 @@ class LCD:
             val &= ~0x08  # D3=0 表示 BGR
         else:
             val |= 0x08  # D3=1 表示 RGB
-        # self._write_data(0x28)
+        self._write_data(val)
+
 
         # 像素格式  888 666 565
         self._write_cmd(0x3A)
@@ -877,9 +881,7 @@ class LCD:
         elif self.__color_bit == 24:
             self._write_data(0x77)
 
-        # 写入 MADCTL
-        self._write_cmd(0x36)
-        self._write_data(val)
+
 
         # === 反色显示（可选）===
         # 命令 0x21：Inversion ON s
@@ -898,8 +900,64 @@ class LCD:
         self.fill(self.color.黑)
         return self
 
-    async def init_async(self):
-        raise ValueError("init未实现！")
+    async def _init_async(self, 反色=1, rgb=1, 左右镜像=1):
+        # 复位
+        if self._rst is None:
+            self._write_cmd(0x01)
+        else:
+            self._rst.value(0)
+            await asyncio.sleep_ms(50)
+            self._rst.value(1)
+        await asyncio.sleep_ms(150)  # 等待 120ms 以上
+
+        # 退出睡眠
+        self._write_cmd(0x11)
+        await asyncio.sleep_ms(150)
+
+        # === 扫描方向 ===
+        # 0: 正常 / 1: 90° / 2: 180° / 3: 270°
+        # 参考 ST7796 寄存器 0x36（MADCTL）
+        # 默认 val 数组对应 旋转角度下 MY/MX/MV 三位组合
+        self._write_cmd(0x36)
+        val = [0x00, 0x60, 0xC0, 0xA0][self._旋转]
+        # 左右镜像（MX）控制
+        if not 左右镜像:
+            val ^= 0x40  # 取反 MX 位（D6）
+        # RGB/BGR 控制
+        if rgb:
+            val &= ~0x08  # D3=0 表示 BGR
+        else:
+            val |= 0x08  # D3=1 表示 RGB
+        self._write_data(val)
+
+        # 像素格式  888 666 565
+        self._write_cmd(0x3A)
+        # self._write_data(0x33)
+        if self.__color_bit == 16:
+            self._write_data(0x55)
+        elif self.__color_bit == 18:
+            self._write_data(0x66)
+        elif self.__color_bit == 24:
+            self._write_data(0x77)
+
+
+
+        # === 反色显示（可选）===
+        # 命令 0x21：Inversion ON s
+        if 反色:
+            self._write_cmd(0x21)
+        else:
+            self._write_cmd(0x20)
+
+        # === 开显示 ===
+        # 命令 0x29：Display ON
+        self._write_cmd(0x29)
+        await asyncio.sleep_ms(60)
+
+        # === 清屏 ===
+        # 使用基础灰阶黑色填充整个屏幕
+        self.fill(self.color.黑)
+        return self
 
     # 简单图片显示，评估一下屏幕素质和全视角，前面的图片处理函数被不小心删了
     def show_bmp(self, path, x=0, y=0, max_w=None, max_h=None):
