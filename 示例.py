@@ -55,7 +55,16 @@ st.txt(
     缓存=True,
 )
 time.sleep_ms(10)
-time.sleep(4)
+st.txt( 
+    字符串="阿斯顿asd",
+    x=20,
+    y=20,
+    size=32,
+    字体色=st.color.红,
+    背景色=st.color.黑,
+    缓存=True,
+)
+time.sleep(4) 
      
 # 丢弃像素
 # st._test_像素裁剪()
