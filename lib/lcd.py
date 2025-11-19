@@ -849,10 +849,6 @@ class LCD:
         # 0: 正常 / 1: 90° / 2: 180° / 3: 270°
         # 参考 ST7796 寄存器 0x36（MADCTL）
         # 默认 val 数组对应 旋转角度下 MY/MX/MV 三位组合
-        # === 扫描方向 ===
-        # 0: 正常 / 1: 90° / 2: 180° / 3: 270°
-        # 参考 ST7796 寄存器 0x36（MADCTL）
-        # 默认 val 数组对应 旋转角度下 MY/MX/MV 三位组合
         self._write_cmd(0x36)
         val = [0x00, 0x60, 0xC0, 0xA0][self._旋转]
         # 左右镜像（MX）控制
@@ -896,7 +892,7 @@ class LCD:
         return self
 
     async def _init_async(self, 反色=1, rgb=1, 左右镜像=1):
-                # 复位
+        # 复位
         if self._rst is None:
             self._write_cmd(0x01)
         else:
