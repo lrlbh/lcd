@@ -2,11 +2,11 @@ import asyncio
 import time
 from machine import Pin, SPI
 
+# from lib import udp
+
 
 class LCD:
-
     class Size:
-        
         # W -- H
         st7735 = (132, 162)
 
@@ -772,6 +772,9 @@ class LCD:
         else:
             self._bl = None
 
+        self._wh = None
+        self._max_h = 0
+
         # 像素bit
         self.__color_bit = color_bit
         self._byte = 3
@@ -861,7 +864,6 @@ class LCD:
             val |= 0x08  # D3=1 表示 RGB
         self._write_data(val)
 
-
         # 像素格式  888 666 565
         self._write_cmd(0x3A)
         # self._write_data(0x33)
@@ -871,8 +873,6 @@ class LCD:
             self._write_data(0x66)
         elif self.__color_bit == 24:
             self._write_data(0x77)
-
-
 
         # === 反色显示（可选）===
         # 命令 0x21：Inversion ON s
@@ -930,8 +930,6 @@ class LCD:
             self._write_data(0x66)
         elif self.__color_bit == 24:
             self._write_data(0x77)
-
-
 
         # === 反色显示（可选）===
         # 命令 0x21：Inversion ON s
@@ -1281,15 +1279,15 @@ class LCD:
         x,
         y,
         size,
-        字体色 = None,
-        背景色 = None,
-        缓存 = False,
+        字体色=None,
+        背景色=None,
+        缓存=False,
     ):
         if 字体色 is None:
             字体色 = self.color.白
         if 背景色 is None:
             背景色 = self.color.黑
-        
+
         # s = time.ticks_ms()
         # 终点字符，终点坐标
         new_str = []  # 处理非法数据后的字符串
@@ -1350,7 +1348,7 @@ class LCD:
                         # zxc.extend(背景色)
             if t:
                 zxc.extend(背景色 * t)
- 
+
             # 点阵字节转像素，此法也不错甚至稍快
             # 数据存入列表，只调用一次 extend
             # 数据块 = []  # 暂存所有小片段的引用
@@ -1386,6 +1384,7 @@ class LCD:
         ascii = """ 1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ~·！@#￥%……&*（）——++-=、|【{}】；：‘“，《。》/？*~!@#$%^&*()-_=+[{}]\|;:'",<.>/?/*"""
         常用字符 = "温度电压流功率"
         all = ascii + 常用字符
+        缓存字符 = "123456789℃"
 
     def _load_bmf(self, path, 需要的字符):
         LCD._char = {}
@@ -1432,8 +1431,11 @@ class LCD:
                         idx += 点阵长度
 
     def _load_bmf_select(self, path, 需要的字符):
+        # s = time.ticks_ms()
+
+
         # —— 读取固定上限（保留原 buf）——
-        size = 4096 * 50
+        size = 1024 * 50
         buf = bytearray(size)
         with open(path, "rb") as f:
             n = f.readinto(buf)
@@ -1480,10 +1482,25 @@ class LCD:
                 LCD._char[字号] = {}
 
                 ascii点阵长度 = (字号 * 字号) // 16
+
                 点阵长度 = (字号 * 字号) // 8
                 for 字符 in 文本:
-                    idx = buf.find(ord(字符).to_bytes(4, "little"), idx_start, idx_end)
+                    # idx = buf.find(
+                    #     ord(字符).to_bytes(4, "little"),
+                    #     idx_start,
+                    #     idx_end,
+                    # )
+                    pattern = ord(字符).to_bytes(4, "little")
+                    # 先在 [idx_start, idx_end) 中找第一次出现
+                    idx = buf.find(pattern, idx_start, idx_end)
 
+                    # 如果命中了但不是 4 字节对齐，往后继续找，直到：
+                    #   1. 找不到（idx == -1）
+                    #   2. 找到一个 (idx - idx_start) % 4 == 0 的“真对齐”位置
+                    while idx != -1 and ((idx - idx_start) & 3):
+                        idx = buf.find(pattern, idx + 1, idx_end)
+
+                    # 字符不存在？
                     if idx < 0:
                         continue
 
@@ -1503,7 +1520,10 @@ class LCD:
                     if ord(字符) < 128:
                         LCD._char[字号][字符] = f.read(ascii点阵长度)
                     else:
+                        # if 字号 == 32:
+                        #     udp.send(点阵长度)
                         LCD._char[字号][字符] = f.read(点阵长度)
+        # udp.send(time.ticks_ms() - s)
 
     # 参数格式
     # {16:"sada",32:"asdas"}
@@ -1520,12 +1540,12 @@ class LCD:
         # 加载全部字符，速度快，但是几M的数据内存放不下
         elif 需要的字符 == "all":
             raise TypeError("操了，快速加载全部字符被删除了，需要重新写一下")
+            需要的字符 = [16, 24, 32, 40, 48, 56, 64, 72]
             self._load_bmf(path)
         else:
             raise TypeError('load_bmf 参数有误！ 需要: "all" or {} ')
 
         return self
-
 
     def new_波形(
         self,
@@ -1552,6 +1572,126 @@ class LCD:
             data_max,
             波形色,
             背景色,
+        )
+
+    def new_txt(
+        self,
+        字符串,
+        size,
+        超时=500,
+        x=None,
+        y=None,
+        字体色=None,
+        背景色=None,
+        缓存=False,
+    ):
+        return 字符区域(
+            字符串,
+            size,
+            self,
+            超时,
+            x,
+            y,
+            字体色,
+            背景色,
+            缓存,
+        )
+
+
+class 字符区域:
+    def __init__(
+        self,
+        字符串,
+        size,
+        st: LCD,
+        超时,
+        x=None,
+        y=None,
+        字体色=None,
+        背景色=None,
+        缓存=False,
+    ):
+        self._超时 = 超时
+        self._字体色 = 字体色
+        self._背景色 = 背景色
+        self._st = st
+        self._size = size
+        self._x_start = []
+
+        # 起点
+        self._x = x
+        self._y = y
+        if x is None or y is None:
+            if st._wh is None:
+                self._x = 0
+                self._y = 0
+            else:
+                self._x = st._wh[0]
+                self._y = st._wh[1]
+
+        # 终点
+        w = self._x
+        h = self._y + size
+        for 字符 in 字符串:
+            self._x_start.append(w)
+            if ord(字符) < 128:
+                w += size // 2
+            else:
+                w += size
+
+        if self._st._max_h < h:
+            self._st._max_h = h
+
+        # 超区域
+        if w > st._width:
+            raise ValueError(f"超出显示区域->宽({w})")
+        if h > st._height:
+            raise ValueError(f"超出显示区域->高({h})")
+
+        # 下次坐标
+        # udp.send(f"{w, h}")
+        if w >= st._width and h >= self._st._max_h:
+            st._wh = (0, h)
+        elif w >= st._width:
+            st._wh = (self._x, h)
+        else:
+            st._wh = (w, h - size)
+
+        self._st.txt(字符串, self._x, self._y, size, 字体色, 背景色, 缓存)
+
+    def up_data(self, 字符串, start, 字体色=None, 背景色=None, 缓存=True):
+        if 字体色 is None:
+            字体色 = self._字体色
+        if 背景色 is None:
+            背景色 = self._背景色
+        self._st.txt(
+            字符串,
+            self._x_start[start],
+            self._y,
+            self._size,
+            字体色,
+            背景色,
+            缓存,
+        )
+
+    # 比较常用字符串用元组或者列表替代
+    # [0] 存数据 [1] 存ms时间戳
+    def up_data_time(self, 元组, start, 背景色=None, 缓存=True):
+        if 背景色 is None:
+            背景色 = self._背景色
+
+        if time.ticks_diff(time.ticks_ms(), 元组[1]) > self._超时:
+            字体色 = self._st.color.黄
+        else:
+            字体色 = self._st.color.绿
+        self._st.txt(
+            元组[0],
+            self._x_start[start],
+            self._y,
+            self._size,
+            字体色,
+            背景色,
+            缓存,
         )
 
 
@@ -1714,7 +1854,3 @@ class 预设色24位:
     橙 = b"\xf8\x90\x30"  # (248,144,48)
     紫 = b"\x98\x58\xd0"  # (152,88,208)
     粉 = b"\xf8\xb0\xc0"  # (248,176,192)
-
-
-
-

@@ -6,7 +6,7 @@ except ImportError:
     from lib import lcd
 
 
-def get_st(旋转):
+def get_st(旋转)->lcd.LCD:
     # 老板子引脚
     spi = SPI(
         1,
@@ -42,6 +42,24 @@ def get_st(旋转):
     #         32: "zxcgvsedfg的说法是德国",
     #     },
     # )
+    
+    
+    
+st = get_st(1)
+txt1 = st.new_txt("aaaaaaaaaaaaaad",32)
+txt2 = st.new_txt("asd",32)
+txt2 = st.new_txt("asd",32)
+txt2 = st.new_txt("asd",32)
+txt2 = st.new_txt("asd",32)
+txt2 = st.new_txt("asd",32)
+txt2 = st.new_txt("asd",32)
+
+
+while True:
+    txt1.up_data("sss",1)
+    time.sleep(1)
+    txt1.up_data("ddd",1)
+    time.sleep(1)
 
 # 显示字符
 st = get_st(3)
