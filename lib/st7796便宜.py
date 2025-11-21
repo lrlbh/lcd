@@ -109,7 +109,7 @@ class ST7796_便宜(lcd.LCD):
         time.sleep_ms(60)
 
         # === 可选：清屏为黑 ===
-        # self.fill(self.color.黑)
+        self.fill(self.color.黑)
         return self
 
     async def _init_async(self):
@@ -214,5 +214,5 @@ class ST7796_便宜(lcd.LCD):
         await asyncio.sleep_ms(60)
 
         # === 可选：清屏为黑 ===
-        # self.fill(self.color.黑)
+        self.fill(self.color.黑)
         return self
