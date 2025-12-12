@@ -2,6 +2,8 @@ import asyncio
 import time
 from machine import Pin, SPI
 
+from lib.pwm import PWM
+
 # from lib import udp
 
 
@@ -766,6 +768,8 @@ class LCD:
         else:
             self._rst = None
 
+        self._bl_num = bl
+
         # 背光
         if bl is not None:
             self._bl = Pin(bl, Pin.OUT, value=1)
@@ -1263,6 +1267,19 @@ class LCD:
             r, g, b = r[:3]
         return bytes([r, g, b])
 
+    def bl(self, 百分比, 频率=300):
+        duty = int(百分比 * 655.35)
+        
+        if duty > 58000:
+            duty = 65535
+        elif duty < 0:
+            duty = 0
+
+        if 百分比 == 100:
+            self._bl = Pin(self._bl_num, Pin.OUT, value=1)
+        else:
+            self._bl = PWM(self._bl_num, freq=频率, duty_u16=duty)
+
     # 清屏
     def fill(self, color):
         self._set_window(0, 0, self._width - 1, self._height - 1)
@@ -1433,7 +1450,6 @@ class LCD:
     def _load_bmf_select(self, path, 需要的字符):
         # s = time.ticks_ms()
 
-
         # —— 读取固定上限（保留原 buf）——
         size = 1024 * 50
         buf = bytearray(size)
@@ -1574,17 +1590,23 @@ class LCD:
             背景色,
         )
 
+    def set_超时ms(self, 超时ms):
+        self._超时ms = 超时ms
+
     def new_txt(
         self,
         字符串,
         size,
-        超时=500,
+        超时=None,
         x=None,
         y=None,
         字体色=None,
         背景色=None,
         缓存=False,
     ):
+        if 超时 is None:
+            超时 = self._超时ms
+
         return 字符区域(
             字符串,
             size,
@@ -1617,6 +1639,7 @@ class 字符区域:
         self._st = st
         self._size = size
         self._x_start = []
+        # self._非更新 = ["",0]
 
         # 起点
         self._x = x
@@ -1725,8 +1748,10 @@ class 波形:
         for t in 波形像素:
             self._波形len.append(t * self._size_byte)
         self._波形色 = []
+        self._波形色_还原 = []
         for i, t in enumerate(波形色):
             self._波形色.append(t * 波形像素[i])
+            self._波形色_还原.append(背景色 * 波形像素[i])
         self._背景色 = 背景色
         self._size = int(size_w * size_h * self._size_byte)
         self._buf = bytearray(self._size)
@@ -1736,6 +1761,7 @@ class 波形:
         self._min = data_min
         self._max = data_max
         self._允许的最大下标 = []
+        self._td = bytearray(self._背景色 * self._size_h)
         for t in 波形像素:
             self._允许的最大下标.append(self._size_h - t)
 
@@ -1748,7 +1774,8 @@ class 波形:
 
     def append_data(self, data: list) -> None:
         # 生成背景色
-        td = bytearray(self._背景色 * self._size_h)
+        # self._td[:] = self._背景色 * self._size_h
+        # self._td = bytearray(self._背景色 * self._size_h)
 
         # 模拟网格，看看效果
         # for i in  range(5):
@@ -1759,6 +1786,8 @@ class 波形:
         #     td[i*60:i*60+3] = self._st.color.基础灰阶.黑
 
         # 遍历多个输入通道
+        还原i = []
+        还原i_p = []
         for 通道_i in range(len(data)):
             # 数据映射到下标
             index = (
@@ -1775,16 +1804,23 @@ class 波形:
 
             # 每个像素多少个字节做一下偏移
             index = int(index) * self._size_byte
+            inedx_p = index + self._波形len[通道_i]
+            还原i.append(index)
+            还原i_p.append(inedx_p)
 
             # 数据更新到背景色中
-            td[index : index + self._波形len[通道_i]] = self._波形色[通道_i]
+            self._td[index:inedx_p] = self._波形色[通道_i]
 
         # # 查看有无，不合理数据
         # if len(td) > self._size_h * self._size_byte:
         #     udp.send("ERROR")
         #     return
 
-        self._append(td)
+        self._append(self._td)
+
+        # 还原颜色
+        for i in range(len(data)):
+            self._td[还原i[i] : 还原i_p[i]] = self._波形色_还原[i]
 
     # 单次追加数据越多越慢
     def _append(self, data: bytes) -> None:
