@@ -3,7 +3,7 @@ import time
 from machine import SPI
 from lib import ili9488, lcd, udp, gc9a01, gc9107, st7796, st7796便宜
 
-驱动分辨率 = lcd.LCD.Size.st7796
+驱动分辨率 = lcd.LCD.Size.st7789
 像素缺失 = lcd.LCD.像素缺失.st7789_1_9
 像素缺失 = (0, 0, 0, 0)
 
@@ -23,39 +23,39 @@ st = lcd.LCD(
     spi,
     cs=47,
     dc=21,
-    # rst=None,
-    rst=14,
+    rst=None,
+    # rst=14,
     bl=48,
     size=驱动分辨率,
-    旋转=0,
+    旋转=1,
     color_bit=16,
     逆CS=False,
     像素缺失=像素缺失,
-)._init(反色=0, 左右镜像=0, rgb=0)  # 反色=True, RGB=True)
+)._init(反色=1, 左右镜像=0, rgb=0)  # 反色=True, RGB=True)
 
-st.fill(st.color.白)
+# st.fill(st.color.白)
 
-st._char[32] = {}
-st._char[32]["阿"] = bytes([0x00,0x00])
-st.def_字符.all = "的身份人格完善的法律就能很快就"
-st.load_bmf("/字库.bmf",{
-    16:"caxzsdgfsdfgDADSZF撒法帝国",
-    32:"zxcgvsedfg的说法是德国"
-})
+# st._char[32] = {}
+# st._char[32]["阿"] = bytes([0x00,0x00])
+# st.def_字符.all = "的身份人格完善的法律就能很快就"
+# st.load_bmf("/字库.bmf",{
+#     16:"caxzsdgfsdfgDADSZF撒法帝国",
+#     32:"zxcgvsedfg的说法是德国"
+# })
 
-st.txt(
-    字符串="阿斯顿asd",
-    x=20,
-    y=20,
-    size=32,
-    字体色=st.color.白,
-    背景色=st.color.黑,
-    缓存=True,
-)
+# st.txt(
+#     字符串="阿斯顿asd",
+#     x=20,
+#     y=20,
+#     size=32,
+#     字体色=st.color.白,
+#     背景色=st.color.黑,
+#     缓存=True,
+# )
 
-st._test_像素裁剪()
-while True:
-    pass
+# st._test_像素裁剪()
+# while True:
+#     pass
 
 
 # 4角度旋转测试
@@ -103,7 +103,7 @@ bx1 = st.new_波形(
     h起点=90,
     size_w=200,
     size_h=100,
-    波形像素=[6, 6, 6],
+    波形像素=[32, 32, 32],
     多少格=998,
     data_min=[0, 0, 0],
     data_max=[33, 66, 99],
@@ -131,14 +131,14 @@ bx3 = st.new_波形(
     h起点=280,
     size_w=200,
     size_h=40,
-    波形像素=[4, 4, 4],
+    波形像素=[8, 8, 8],
     多少格=998,
     data_min=[0, 0, 0],
     data_max=[33, 66, 99],
     波形色=[st.color.红, st.color.绿, st.color.蓝],
     背景色=st.color.白,
 )
-
+ 
 
 t1, t2, t3 = 0, 0, 0
 tt1, tt2, tt3 = 1, 1, 1
