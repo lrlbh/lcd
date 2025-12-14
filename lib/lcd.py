@@ -2,6 +2,7 @@ import asyncio
 import time
 from machine import Pin, SPI
 
+from lib import udp
 from lib.pwm import PWM
 
 # from lib import udp
@@ -1269,13 +1270,13 @@ class LCD:
 
     def bl(self, 百分比, 频率=300):
         duty = int(百分比 * 655.35)
-        
+
         if duty > 58000:
             duty = 65535
         elif duty < 0:
             duty = 0
 
-        if 百分比 == 100:
+        if duty == 65535:
             self._bl = Pin(self._bl_num, Pin.OUT, value=1)
         else:
             self._bl = PWM(self._bl_num, freq=频率, duty_u16=duty)
@@ -1747,11 +1748,7 @@ class 波形:
         self._波形len = []
         for t in 波形像素:
             self._波形len.append(t * self._size_byte)
-        self._波形色 = []
-        self._波形色_还原 = []
-        for i, t in enumerate(波形色):
-            self._波形色.append(t * 波形像素[i])
-            self._波形色_还原.append(背景色 * 波形像素[i])
+        self._波形色 = 波形色
         self._背景色 = 背景色
         self._size = int(size_w * size_h * self._size_byte)
         self._buf = bytearray(self._size)
@@ -1764,6 +1761,7 @@ class 波形:
         self._td = bytearray(self._背景色 * self._size_h)
         for t in 波形像素:
             self._允许的最大下标.append(self._size_h - t)
+        self._上一次波形坐标 = [0, 0, 0, 0]
 
     def 更新(self):
         self._st._set_window(self._w起点, self._h起点, self._w终点, self._h终点)
@@ -1774,7 +1772,7 @@ class 波形:
 
     def append_data(self, data: list) -> None:
         # 生成背景色
-        # self._td[:] = self._背景色 * self._size_h
+        self._td[:] = self._背景色 * self._size_h
         # self._td = bytearray(self._背景色 * self._size_h)
 
         # 模拟网格，看看效果
@@ -1787,7 +1785,6 @@ class 波形:
 
         # 遍历多个输入通道
         还原i = []
-        还原i_p = []
         for 通道_i in range(len(data)):
             # 数据映射到下标
             index = (
@@ -1796,31 +1793,48 @@ class 波形:
                 * self._允许的最大下标[通道_i]
             )
 
-            # # 限幅，防止传入数据超过幅值
+            # 限幅，防止传入数据超过幅值
             if index > self._允许的最大下标[通道_i]:
                 index = self._允许的最大下标[通道_i]
             if index < 0:
                 index = 0
 
-            # 每个像素多少个字节做一下偏移
+            # 当前波形多少像素做一下偏移
             index = int(index) * self._size_byte
             inedx_p = index + self._波形len[通道_i]
             还原i.append(index)
-            还原i_p.append(inedx_p)
 
             # 数据更新到背景色中
-            self._td[index:inedx_p] = self._波形色[通道_i]
+            self._td[index:inedx_p] = self._波形色[通道_i] * self._波形像素[通道_i]
+
+            # 剧烈波动，上升接线
+            zz = index - self._上一次波形坐标[通道_i]
+            zz //= self._size_byte
+            if zz > 0:
+                self._td[self._上一次波形坐标[通道_i] : index] = (
+                    self._波形色[通道_i] * zz
+                )
+
+            # 剧烈波动，下降接线
+            zz = self._上一次波形坐标[通道_i] - index
+            zz //= self._size_byte
+            if zz > 0:
+                # 下降接线时，是否补头
+                # self._td[
+                #     self._上一次波形坐标[通道_i] : self._上一次波形坐标[通道_i]
+                #     + self._波形len[通道_i]
+                # ] = self._波形色[通道_i] * 5
+                self._td[index : self._上一次波形坐标[通道_i]] = (
+                    self._波形色[通道_i] * zz
+                )
 
         # # 查看有无，不合理数据
-        # if len(td) > self._size_h * self._size_byte:
+        # if len(self._td) != self._size_h * self._size_byte:
         #     udp.send("ERROR")
         #     return
 
+        self._上一次波形坐标 = 还原i
         self._append(self._td)
-
-        # 还原颜色
-        for i in range(len(data)):
-            self._td[还原i[i] : 还原i_p[i]] = self._波形色_还原[i]
 
     # 单次追加数据越多越慢
     def _append(self, data: bytes) -> None:
