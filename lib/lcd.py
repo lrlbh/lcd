@@ -1,9 +1,6 @@
 import asyncio
 import time
-from machine import Pin, SPI
-
-from lib import udp
-from lib.pwm import PWM
+from machine import Pin, SPI,PWM
 
 # from lib import udp
 
