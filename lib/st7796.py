@@ -1,6 +1,6 @@
 import time
-from machine import Pin
 import lcd
+
 
 # 和不用校准参数看不出区别，就当有病治病没变强身了
 class ST7796(lcd.LCD):
@@ -32,14 +32,14 @@ class ST7796(lcd.LCD):
         self._write_cmd(0x36)
         self._write_data(val)
 
-        # === 像素格式 === 
+        # === 像素格式 ===
         self._write_cmd(0x3A)
         if self.__color_bit == 16:
-            self._write_data(0x55)  # RGB565
-        elif self.__color_bit in [18, 24]:
-            self._write_data(0x66)  # RGB666
+            self._write_data(0x5)  # RGB565
+        elif self.__color_bit == 18:
+            self._write_data(0x6)  # RGB666
         else:
-            self._write_data(0x55)
+            self._write_data(0x7)  # RGB888
 
         # === 显示反相控制 ===
         self._write_cmd(0xB4)
@@ -51,7 +51,7 @@ class ST7796(lcd.LCD):
 
         # === 电压控制 ===
         self._write_cmd(0xE8)
-        self._write_data_bytes(b"\x40\x8A\x00\x00\x29\x19\xA5\x33")
+        self._write_data_bytes(b"\x40\x8a\x00\x00\x29\x19\xa5\x33")
 
         # === 电流控制 ===
         self._write_cmd(0xC1)
@@ -66,13 +66,13 @@ class ST7796(lcd.LCD):
         # === Gamma 正极 ===
         self._write_cmd(0xE0)
         self._write_data_bytes(
-            b"\xF0\x09\x0B\x06\x04\x15\x2F\x54\x42\x3C\x17\x14\x18\x1B"
+            b"\xf0\x09\x0b\x06\x04\x15\x2f\x54\x42\x3c\x17\x14\x18\x1b"
         )
 
         # === Gamma 负极 ===
         self._write_cmd(0xE1)
         self._write_data_bytes(
-            b"\xF0\x09\x0B\x06\x04\x03\x2D\x43\x42\x3B\x16\x14\x17\x1B"
+            b"\xf0\x09\x0b\x06\x04\x03\x2d\x43\x42\x3b\x16\x14\x17\x1b"
         )
 
         # === 恢复默认页 ===

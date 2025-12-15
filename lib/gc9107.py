@@ -1,6 +1,5 @@
 import time
 import lcd
-import asyncio
 
 
 class GC9107(lcd.LCD):

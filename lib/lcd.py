@@ -1,6 +1,6 @@
 import asyncio
 import time
-from machine import Pin, SPI,PWM
+from machine import Pin, SPI, PWM
 
 # from lib import udp
 
@@ -19,11 +19,14 @@ class LCD:
 
         st7789 = (240, 320)
         st7796 = (320, 480)
+        st7365 = (320, 480)
 
         ili9488 = (320, 480)
 
         gc9a01 = (240, 240)
         gc9107 = (128, 160)
+
+        nv3007 = (168, 428)
 
     # 顺序上下左右
     # 上上下下左右左右ba...
@@ -54,6 +57,9 @@ class LCD:
 
         # 1.9寸 170 * 320
         st7789_1_9 = (0, 0, 35, 35)
+
+        # 2.79寸 142 * 428
+        nv_3007_2_79 = (0, 0, 12, 14)
 
     # 加速set_window
     _window缓存 = bytearray(4)
@@ -1212,7 +1218,7 @@ class LCD:
         h = 1
         while h < self._height:
             self.txt(
-                "阿",
+                "阿a",
                 1,
                 h,
                 32,
