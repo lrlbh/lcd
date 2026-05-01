@@ -2,11 +2,15 @@ import time
 import lcd
 
 
-# 默认初始化可用，不过下次打算使用这款屏幕，所以测试商家校准参数
-# code里面找到的都是ili9488，st7796之类的乱七八糟的初始化，随便试一个看看
+# 默认初始化可用
+# 不过下次打算使用这款屏幕，所以而外测试下商家校准参数，显示效果如何
+# 没有单独初始化文件
+# code里面的都是ili9488，st7796之类，乱七八糟的初始化，注释不同校准参数也不同
+# 随便试一个看看
+
+
 class ST7365傻(lcd.LCD):
     def _init(self):
-
         # === 1. 硬件复位 ===
         if self._rst is None:
             self._write_cmd(0x01)  # 软件复位
@@ -93,6 +97,7 @@ class ST7365傻(lcd.LCD):
         self._write_data(0x00)  # 禁用
         self._write_cmd(0x21)  # 显示反转 (Display Inversion ON)，按需启用
 
+
         self._write_cmd(0x29)  # Display ON
         time.sleep_ms(50)
 
@@ -114,3 +119,4 @@ class ST7365傻(lcd.LCD):
         # === 初始清屏 ===
         self.fill(self.color.黑)
         return self
+   

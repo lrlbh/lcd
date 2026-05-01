@@ -9,7 +9,7 @@ def get_st(旋转) -> lcd.LCD:
     # 老板子引脚
     spi = SPI(
         1,
-        baudrate=100_000_000,
+        baudrate=80_000_000,
         polarity=0,
         phase=0,
         sck=12,
@@ -33,7 +33,8 @@ def get_st(旋转) -> lcd.LCD:
     #     像素缺失=(0, 0, 0, 0),
     # )._init(左右镜像=0, rgb=0)
 
-    return st7365傻.ST7365傻(
+    #return st7365傻.ST7365傻(
+    return lcd.LCD(
         spi,
         cs=47,
         dc=21,
@@ -44,7 +45,7 @@ def get_st(旋转) -> lcd.LCD:
         size=(320, 480),
         # size=(240, 320),
         旋转=旋转,
-        color_bit=18,
+        color_bit=24,
         # 像素缺失=(0, 0, 12,14),
         像素缺失=(0, 0, 0, 0),
     )._init()
@@ -56,6 +57,11 @@ def get_st(旋转) -> lcd.LCD:
 # st._test_像素裁剪()
 # while True:
 #     pass
+
+st = get_st(3)
+st.fill(st.color.蓝)
+#st.fill( b"\xff\x00\x00")
+time.sleep(100)
 
 # 4角度旋转测试
 while True:
